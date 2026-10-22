@@ -920,6 +920,11 @@ fn edit_contents(s: &mut Session, p: &Value) -> Result<Value> {
     let mut child = decode_source(&name, &bytes)?;
     // Bundles keep their document id; each open copy needs its own.
     child.id = DocId::fresh();
+    // Contents edited from a document with a design timeline get one of their own, saved inside
+    // the contents (a `.pcraft`), so it resumes at the next Edit Contents.
+    if st.doc.design_timeline.is_some() && child.design_timeline.is_none() {
+        child.design_timeline = Some(Arc::new(photocraft_doc::design::DesignTimeline::new(Arc::new(child.clone()))));
+    }
     child.name = name;
     let index = s.add_document(child, None);
     // Admission may replace an ID already owned by another open document.

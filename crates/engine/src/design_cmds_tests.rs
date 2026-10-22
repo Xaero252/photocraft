@@ -311,3 +311,39 @@ fn a_baked_step_replays_its_result_and_goes_stale_after_an_earlier_change() {
     assert_eq!(state(&mut s, 3), "stale");
     assert!(doc(&s).selection.is_some(), "a stale step still applies its result");
 }
+
+#[test]
+fn smart_object_contents_keep_a_nested_timeline() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "P"})).unwrap();
+    s.execute("select.all", json!({})).unwrap();
+    s.execute("edit.fillForeground", json!({})).unwrap();
+    s.execute("layer.smartObjects.convertToSmartObject", json!({})).unwrap();
+    let parent = s.active_index().unwrap();
+    s.execute("layer.smartObjects.editContents", json!({})).unwrap();
+    assert_ne!(s.active_index(), Some(parent));
+    assert!(steps(&mut s).is_empty(), "the contents start a timeline of their own");
+    s.execute("layer.new.layer", json!({"name": "Inner"})).unwrap();
+    assert_eq!(commands(&mut s), ["layer.new.layer"]);
+    s.execute("layer.smartObjects.saveContents", json!({})).unwrap();
+    // Closed, so the next Edit Contents reads the saved contents back.
+    s.execute("file.close", json!({})).unwrap();
+    assert_eq!(s.documents().len(), 1);
+    s.set_active(parent);
+    let st = steps(&mut s);
+    let save = st.last().unwrap();
+    assert_eq!(save["command"], "layer.smartObjects.saveContents");
+    assert_eq!(save["baked"], true, "a step made from another document replays its result");
+    let before = doc(&s);
+    s.execute("design.replay", json!({})).unwrap();
+    assert_eq!(doc(&s), before);
+    // Editing the contents again resumes their timeline.
+    s.execute("layer.smartObjects.editContents", json!({})).unwrap();
+    assert_eq!(commands(&mut s), ["layer.new.layer"]);
+    // Suppressing the conversion removes the smart object: its saved edit can't apply.
+    s.set_active(parent);
+    let convert = step_id(&mut s, 3);
+    s.execute("design.suppress", json!({"step": convert})).unwrap();
+    let last = steps(&mut s).len() - 1;
+    assert_eq!(state(&mut s, last), "missingReference");
+}

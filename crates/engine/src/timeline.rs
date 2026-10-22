@@ -17,6 +17,8 @@ pub(crate) struct Before {
     active: Option<LayerId>,
     selected: Vec<LayerId>,
     history_row: Option<u64>,
+    /// The command started in this document (not another one, like Save Contents in the child).
+    was_active: bool,
 }
 
 /// Commands that change no document but feed the steps after them (tool colours and options).
@@ -30,10 +32,12 @@ pub const BAKED: &[&str] = &["select.reselect"];
 
 /// Every document with a timeline, before a command runs (empty when none has one).
 pub(crate) fn capture(s: &Session) -> Vec<Before> {
+    let active = s.active().map(|st| st.doc.id);
     s.docs
         .iter()
         .filter(|st| st.doc.design_timeline.is_some())
         .map(|st| Before {
+            was_active: active == Some(st.doc.id),
             doc: st.doc.id,
             state: st.doc.clone(),
             active: st.active_layer,
@@ -61,7 +65,9 @@ pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, 
             continue;
         }
         let (created, changed) = layer_changes(&b.state, &st.doc);
-        let baked = BAKED.contains(&id).then(|| Arc::new(photocraft_doc::design::Baked::capture(&b.state, &st.doc, &created, &changed)));
+        // A command run from another document (Save Contents, closing an Edit Contents document)
+        // can't run again here: keep what it did.
+        let baked = (BAKED.contains(&id) || !b.was_active).then(|| Arc::new(photocraft_doc::design::Baked::capture(&b.state, &st.doc, &created, &changed)));
         let entry = DesignStep {
             step,
             command: id.to_string(),
