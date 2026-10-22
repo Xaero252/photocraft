@@ -73,6 +73,7 @@ pub mod crop_straighten;
 pub mod crop_ui;
 pub mod dds_options_ui;
 pub mod delete_layer_prompt;
+mod design_timeline_ui;
 pub mod dialog_alt_reset;
 pub mod dialog_blend_ui;
 pub mod dialogs;
@@ -2263,6 +2264,7 @@ impl eframe::App for PhotocraftApp {
         type_panels_ui::windows(self, &ctx);
         analysis_ui::windows(self, &ctx);
         timeline_ui::windows(self, &ctx);
+        design_timeline_ui::windows(self, &ctx);
         workspace_ui::windows(self, &ctx);
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);
