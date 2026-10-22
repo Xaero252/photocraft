@@ -27,8 +27,30 @@ pub(crate) struct Before {
 const PRELUDE: &[&str] = &["tools.", "tool.", "brush.", "gradient.", "pattern.", "cloneSource.", "paint.", "type.", "shape.", "swatches.", "color."];
 
 /// Commands that don't replay identically (found by the `design_replay_audit` test): their steps
-/// keep the layers they produced and replay those instead of running again.
-pub const BAKED: &[&str] = &["select.reselect"];
+/// keep the layers they produced and replay those instead of running again. Most read session
+/// state a replay session doesn't have (the clipboards, the Fade source, the journal), and copying today's
+/// clipboard would paste something other than what was pasted when the step was recorded.
+pub const BAKED: &[&str] = &[
+    "select.reselect",
+    "edit.paste",
+    "edit.pasteSpecial.pasteInPlace",
+    "edit.pasteSpecial.pasteInto",
+    "edit.pasteSpecial.pasteOutside",
+    "layer.layerStyle.pasteLayerStyle",
+    "path.style.pasteFill",
+    "path.style.pasteStroke",
+    "edit.fade",
+    "filter.lastFilter",
+    "edit.transform.again",
+    "edit.transform.againCopy",
+];
+
+/// Whether a step of `id` run with `params` keeps its result instead of running again on replay.
+fn bakes(id: &str, params: &Value) -> bool {
+    // A Vanishing Point paste without a `layer` pastes the clipboard.
+    let vp_clip = || params.get("paste").and_then(Value::as_array).is_some_and(|ps| ps.iter().any(|p| p.get("layer").is_none()));
+    BAKED.contains(&id) || (id == crate::vp_cmds::VP && vp_clip())
+}
 
 /// Every document with a timeline, before a command runs (empty when none has one).
 pub(crate) fn capture(s: &Session) -> Vec<Before> {
@@ -67,7 +89,7 @@ pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, 
         let (created, changed) = layer_changes(&b.state, &st.doc);
         // A command run from another document (Save Contents, closing an Edit Contents document)
         // can't run again here: keep what it did.
-        let baked = (BAKED.contains(&id) || !b.was_active).then(|| Arc::new(photocraft_doc::design::Baked::capture(&b.state, &st.doc, &created, &changed)));
+        let baked = (bakes(id, params) || !b.was_active).then(|| Arc::new(photocraft_doc::design::Baked::capture(&b.state, &st.doc, &created, &changed)));
         let entry = DesignStep {
             step,
             command: id.to_string(),
@@ -83,7 +105,8 @@ pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, 
             baked,
             rerecord: false,
             state: StepState::Ok,
-            checkpoint: Checkpoint(Some(st.doc.clone())),
+            // Without its timeline: that would hold every earlier checkpoint out of the budget's reach.
+            checkpoint: Checkpoint(Some(Arc::new(Document { design_timeline: None, ..(*st.doc).clone() }))),
         };
         let current = st.doc.clone();
         let doc = Arc::make_mut(&mut st.doc);

@@ -1,15 +1,15 @@
 //! Every journaled command, recorded into a design timeline and replayed, must give the same
 //! document. A command that can't belongs in `photocraft_engine::design_cmds::BAKED`, whose steps
 //! replay their stored result instead. Opt-in (slow):
-//! `cargo test -p photocraft-engine --test design_replay_audit -- --ignored --nocapture`.
+//! `cargo test -p photocraft-engine --test it design_replay_audit -- --ignored --nocapture`.
 use std::sync::mpsc;
 use std::time::Duration;
 
 use photocraft_engine::{Session, command_specs};
 use serde_json::{Value, json};
 
-/// A filled pixel layer A under a selection, then (by `kind`) an active text or shape layer, or
-/// no selection.
+/// A filled pixel layer A under a selection, then (by `kind`) an active text or shape layer, no
+/// selection, or a filled clipboard, Fade source, last filter and last transform.
 fn fixture(kind: usize) -> Session {
     photocraft_engine::print_cmds::disable_printing();
     let mut s = Session::new();
@@ -21,13 +21,18 @@ fn fixture(kind: usize) -> Session {
         1 => drop(s.execute("type.create", json!({"x": 2, "y": 10, "text": "Hi", "size": 8, "color": "#000000", "name": "T"})).unwrap()),
         2 => drop(s.execute("shape.create", json!({"kind": "rect", "rect": [4, 4, 10, 6], "fill": "#0000ff"})).unwrap()),
         3 => drop(s.execute("select.deselect", json!({})).unwrap()),
+        4 => {
+            s.execute("edit.copy", json!({})).unwrap();
+            s.execute("filter.blur.gaussianBlur", json!({"radius": 1})).unwrap();
+            s.execute("edit.transform", json!({"matrix": [1, 0, 0, 1, 1, 0], "interpolation": "nearest"})).unwrap();
+        }
         _ => {}
     }
     s.execute("design.start", json!({})).unwrap();
     s
 }
 
-const FIXTURES: usize = 4;
+const FIXTURES: usize = 5;
 
 fn content(s: &Session) -> photocraft_doc::Document {
     let mut d = (*s.active().unwrap().doc).clone();

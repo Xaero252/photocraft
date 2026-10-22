@@ -356,3 +356,48 @@ fn smart_object_contents_keep_a_nested_timeline() {
     let last = steps(&mut s).len() - 1;
     assert_eq!(state(&mut s, last), "missingReference");
 }
+
+#[test]
+fn clipboard_and_fade_steps_replay_their_result() {
+    let mut s = Session::new();
+    s.execute("file.new", json!({"width": 16, "height": 16})).unwrap();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.execute("select.rect", json!({"x": 2, "y": 2, "width": 6, "height": 6})).unwrap();
+    s.execute("edit.fillForeground", json!({})).unwrap();
+    s.execute("edit.copy", json!({})).unwrap();
+    s.execute("design.start", json!({})).unwrap();
+    s.execute("edit.paste", json!({})).unwrap();
+    s.execute("filter.blur.gaussianBlur", json!({"radius": 2})).unwrap();
+    s.execute("edit.fade", json!({"opacity": 50})).unwrap();
+    assert_eq!(commands(&mut s), ["edit.paste", "filter.blur.gaussianBlur", "edit.fade"]);
+    let before = doc(&s);
+    // The replay session has neither the clipboard nor the Fade source.
+    s.execute("design.replay", json!({})).unwrap();
+    assert!(steps(&mut s).iter().all(|x| x["state"]["state"] == "ok"), "{:?}", steps(&mut s));
+    assert_eq!(doc(&s), before);
+}
+
+#[test]
+fn starting_or_stopping_the_timeline_modifies_a_clean_document() {
+    let mut s = Session::new();
+    s.execute("file.new", json!({"width": 16, "height": 16})).unwrap();
+    s.active_mut().unwrap().saved_to("a.pcraft".into());
+    s.execute("design.start", json!({})).unwrap();
+    assert!(s.active().unwrap().is_dirty(), "a save would now write the timeline");
+    s.active_mut().unwrap().saved_to("a.pcraft".into());
+    s.execute("select.rect", json!({"x": 1, "y": 1, "width": 4, "height": 4})).unwrap();
+    assert!(!s.active().unwrap().is_dirty(), "a selection step growing the timeline keeps it clean");
+    s.execute("design.stop", json!({})).unwrap();
+    assert!(s.active().unwrap().is_dirty());
+}
+
+#[test]
+fn a_checkpoint_holds_no_timeline_of_its_own() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.execute("layer.new.layer", json!({"name": "B"})).unwrap();
+    let tl = s.active().unwrap().doc.design_timeline.clone().unwrap();
+    // One that did would keep every earlier checkpoint alive past the budget.
+    assert!(tl.steps.iter().filter_map(|st| st.checkpoint.0.as_ref()).all(|d| d.design_timeline.is_none()));
+    assert!(tl.steps.iter().any(|st| st.checkpoint.0.is_some()));
+}

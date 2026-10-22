@@ -834,8 +834,9 @@ pub fn selection_only_change(a: &Document, b: &Document) -> bool {
         slices,
         variables,
         timeline,
-        // A recorded selection step grows the design timeline; that alone isn't a modification.
-        design_timeline: _,
+        // A recorded selection step grows the design timeline; that alone isn't a modification,
+        // but starting or stopping it is (it changes what a save writes).
+        design_timeline,
         file_encoding,
     } = a;
     // The ignored fields above are the pixel ones `pixels_equal_with` already compares.
@@ -859,6 +860,7 @@ pub fn selection_only_change(a: &Document, b: &Document) -> bool {
         && *slices == b.slices
         && *variables == b.variables
         && *timeline == b.timeline
+        && design_timeline.is_some() == b.design_timeline.is_some()
         && *file_encoding == b.file_encoding
 }
 

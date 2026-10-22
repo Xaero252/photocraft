@@ -1,5 +1,5 @@
 //! Spike for a Fusion-style design timeline: can the session journal be replayed with a step
-//! removed? Report only: `cargo test -p photocraft-engine --test timeline_replay_spike -- --ignored --nocapture`.
+//! removed? Report only: `cargo test -p photocraft-engine --test it timeline_replay_spike -- --ignored --nocapture`.
 use std::collections::HashMap;
 
 use photocraft_doc::{Layer, LayerContent};
