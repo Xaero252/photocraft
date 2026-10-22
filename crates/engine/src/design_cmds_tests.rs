@@ -282,7 +282,16 @@ fn an_edited_step_may_target_another_layer() {
 #[test]
 fn bad_params_are_errors() {
     let mut s = script();
-    let bad = [json!(null), json!({}), json!({"step": -1}), json!({"step": "x"}), json!({"step": u64::MAX}), json!({"at": 999}), json!({"at": -3}), json!({"step": 1, "params": 5})];
+    let bad = [
+        json!(null),
+        json!({}),
+        json!({"step": -1}),
+        json!({"step": "x"}),
+        json!({"step": u64::MAX}),
+        json!({"at": 999}),
+        json!({"at": -3}),
+        json!({"step": 1, "params": 5}),
+    ];
     for id in ["design.suppress", "design.unsuppress", "design.delete", "design.rollTo", "design.editStep"] {
         for p in &bad {
             let _ = s.execute(id, p.clone());

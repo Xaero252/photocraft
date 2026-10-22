@@ -176,8 +176,10 @@ fn deeply_nested_groups_in_a_design_timeline_roundtrip() {
     let run = || {
         let base = nested_doc(MAX_GROUP_DEPTH, SampleType::U8);
         let mut doc = base.clone();
-        let mut step: photocraft_doc::design::DesignStep =
-            serde_json::from_value(serde_json::json!({"step": 1, "command": "c", "params": {}, "label": "c", "active": null, "selected": [], "created": [], "changed": []})).unwrap();
+        let mut step: photocraft_doc::design::DesignStep = serde_json::from_value(
+            serde_json::json!({"step": 1, "command": "c", "params": {}, "label": "c", "active": null, "selected": [], "created": [], "changed": []}),
+        )
+        .unwrap();
         let top = base.layers[0].id;
         step.changed = vec![top];
         step.baked = Some(std::sync::Arc::new(photocraft_doc::design::Baked { layers: base.layers.clone(), placed: Vec::new(), selection: None }));

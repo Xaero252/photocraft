@@ -85,7 +85,9 @@ fn change(s: &mut Session, cmd: &str, label: &str, f: impl FnOnce(&mut DesignTim
         n => tl.steps.get(n - 1).and_then(|st| st.checkpoint.0.clone()),
     };
     if last.is_some_and(|last| !same_content(&last, &st.doc)) {
-        return Err(EngineError::Other(format!("`{cmd}`: the document has changes the design timeline didn't record; stop and restart the timeline to keep them")));
+        return Err(EngineError::Other(format!(
+            "`{cmd}`: the document has changes the design timeline didn't record; stop and restart the timeline to keep them"
+        )));
     }
     let mut next = (*tl).clone();
     let (from, changed) = f(&mut next)?;
@@ -138,9 +140,12 @@ fn roll_to(s: &mut Session, p: &Value) -> Result<Value> {
         let was = tl.in_effect();
         let at = match p.get("at") {
             None | Some(Value::Null) => None,
-            Some(v) => Some(v.as_u64().and_then(|n| usize::try_from(n).ok()).filter(|n| *n <= tl.steps.len()).ok_or_else(|| {
-                bad("design.rollTo", format!("`at` must be a step count from 0 to {} (null = the end)", tl.steps.len()))
-            })?),
+            Some(v) => Some(
+                v.as_u64()
+                    .and_then(|n| usize::try_from(n).ok())
+                    .filter(|n| *n <= tl.steps.len())
+                    .ok_or_else(|| bad("design.rollTo", format!("`at` must be a step count from 0 to {} (null = the end)", tl.steps.len())))?,
+            ),
         };
         tl.marker = at.filter(|n| *n < tl.steps.len());
         Ok((was.min(tl.in_effect()), false))

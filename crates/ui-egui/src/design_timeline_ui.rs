@@ -165,10 +165,9 @@ pub fn strip(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let doc = app.session.active().map(|d| d.doc.clone());
     let mut act = None;
-    egui::Panel::bottom("design_timeline_strip")
-        .exact_size(STRIP_H)
-        .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(8, 0)))
-        .show(ui, |ui| {
+    egui::Panel::bottom("design_timeline_strip").exact_size(STRIP_H).frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(8, 0))).show(
+        ui,
+        |ui| {
             ui.horizontal_centered(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if icons::button(ui, "x", 22.0, false, tl!("Close")).clicked() {
@@ -192,7 +191,8 @@ pub fn strip(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     });
                 });
             });
-        });
+        },
+    );
     finish(app, act);
 }
 

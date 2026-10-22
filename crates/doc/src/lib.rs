@@ -116,7 +116,9 @@ impl Drop for IdScopeGuard {
 }
 
 fn next_id() -> u64 {
-    ID_SCOPE.with(|s| s.borrow().as_ref().and_then(IdScope::mint)).unwrap_or_else(|| UNSCOPED | (NEXT_UNSCOPED.fetch_add(1, Ordering::Relaxed) & (UNSCOPED - 1)))
+    ID_SCOPE
+        .with(|s| s.borrow().as_ref().and_then(IdScope::mint))
+        .unwrap_or_else(|| UNSCOPED | (NEXT_UNSCOPED.fetch_add(1, Ordering::Relaxed) & (UNSCOPED - 1)))
 }
 
 /// The step a scoped id was minted in (None for an unscoped or out-of-range id).

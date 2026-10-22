@@ -176,12 +176,8 @@ pub fn layer_changes(before: &Document, after: &Document) -> (Vec<LayerId>, Vec<
     let old: std::collections::HashMap<LayerId, &crate::Layer> = before.walk().into_iter().map(|(_, _, l)| (l.id, l)).collect();
     let new: std::collections::HashMap<LayerId, &crate::Layer> = after.walk().into_iter().map(|(_, _, l)| (l.id, l)).collect();
     let mut created: Vec<LayerId> = after.walk().into_iter().map(|(_, _, l)| l.id).filter(|id| !old.contains_key(id)).collect();
-    let mut changed: Vec<LayerId> = before
-        .walk()
-        .into_iter()
-        .filter(|(_, _, l)| new.get(&l.id).is_none_or(|n| !same_layer(l, n)))
-        .map(|(_, _, l)| l.id)
-        .collect();
+    let mut changed: Vec<LayerId> =
+        before.walk().into_iter().filter(|(_, _, l)| new.get(&l.id).is_none_or(|n| !same_layer(l, n))).map(|(_, _, l)| l.id).collect();
     created.sort_unstable();
     changed.sort_unstable();
     (created, changed)

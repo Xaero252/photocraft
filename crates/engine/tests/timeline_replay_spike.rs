@@ -363,7 +363,14 @@ fn replay(steps: &[Step], drop: Option<usize>, t: &mut Tally) -> (Session, Vec<S
         if hit.iter().any(|h| !rec.contains(h)) || (r != Role::Free && got != st.after) {
             t.silent += 1;
             let show = |v: &[Option<Key>]| v.iter().map(|o| o.map_or("?".into(), |k| format!("{}:{}", k.0, k.1))).collect::<Vec<_>>().join(",");
-            report.push(format!("  #{i} {}: SILENT touched [{}] recorded [{}]; active {:?} vs {:?}", st.id, show(&hit), show(&rec), active_name(&s), st.after_name));
+            report.push(format!(
+                "  #{i} {}: SILENT touched [{}] recorded [{}]; active {:?} vs {:?}",
+                st.id,
+                show(&hit),
+                show(&rec),
+                active_name(&s),
+                st.after_name
+            ));
         }
     }
     (s, report)

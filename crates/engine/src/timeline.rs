@@ -158,7 +158,11 @@ pub(crate) fn replay(s: &Session, tl: &photocraft_doc::design::DesignTimeline, f
     }
     let resume = match start {
         0 => tl.base.clone(),
-        k => tl.steps.get(k - 1).and_then(|st| st.checkpoint.0.clone()).ok_or_else(|| crate::EngineError::Other("internal error: no checkpoint to replay from".into()))?,
+        k => tl
+            .steps
+            .get(k - 1)
+            .and_then(|st| st.checkpoint.0.clone())
+            .ok_or_else(|| crate::EngineError::Other("internal error: no checkpoint to replay from".into()))?,
     };
     let mut r = scratch(s, &resume);
     for (i, step) in tl.steps.iter_mut().enumerate().take(end).skip(start) {
