@@ -742,6 +742,7 @@ impl Session {
         let scope = photocraft_doc::IdScope::new(self.next_step);
         let before = crate::timeline::capture(self);
         let recorded = (!before.is_empty()).then(|| params.clone());
+        let timed = recorded.is_some();
         let r = {
             let _g = scope.enter();
             self.dispatch_scoped(id, params, background)
@@ -755,8 +756,9 @@ impl Session {
             }
             _ => {}
         }
-        // A started job may still mint ids under this step, so it is spent too.
-        if scope.used() || matches!(r, Ok(Started::Job(_))) {
+        // A started job may still mint ids under this step, and a design-timeline step is named
+        // by it, so either spends it too.
+        if scope.used() || timed || matches!(r, Ok(Started::Job(_))) {
             self.next_step = self.next_step.max(scope.step() + 1);
         }
         r

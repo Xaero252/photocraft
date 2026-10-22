@@ -65,10 +65,13 @@ pub struct DesignStep {
     /// Shares the previous step's undo state (a coalesced edit, e.g. one typing session).
     #[serde(default)]
     pub joins_previous: bool,
-    /// The result of a command that can't replay identically: its created and changed layers
-    /// as they came out, applied instead of running the command.
+    /// The result of a command that can't replay identically, applied instead of running it.
     #[serde(default, skip)]
-    pub baked: Option<Arc<Vec<crate::Layer>>>,
+    pub baked: Option<Arc<Baked>>,
+    /// The params were edited: the next replay re-records what the step creates and changes
+    /// instead of checking them.
+    #[serde(default, skip)]
+    pub rerecord: bool,
     /// Outcome of the last replay (Ok when recorded).
     #[serde(default, skip)]
     pub state: StepState,
@@ -97,6 +100,64 @@ pub enum StepState {
 impl StepState {
     pub fn is_failure(&self) -> bool {
         matches!(self, StepState::Error { .. } | StepState::MissingReference { .. } | StepState::Retargeted { .. })
+    }
+}
+
+/// A step's result as it came out: the layers it created and changed (a changed layer missing
+/// here was removed), for each created layer the layers directly below and above it, and the
+/// selection when the step changed it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Baked {
+    pub layers: Vec<crate::Layer>,
+    pub placed: Vec<(LayerId, Option<LayerId>, Option<LayerId>)>,
+    pub selection: Option<Option<crate::Surface>>,
+}
+
+impl Baked {
+    /// What `after` holds of the `created` and `changed` layers, and its selection if it differs
+    /// from `before`'s.
+    pub fn capture(before: &Document, after: &Document, created: &[LayerId], changed: &[LayerId]) -> Self {
+        let layers = created.iter().chain(changed).filter_map(|id| after.layer(*id).cloned()).collect();
+        let placed = created
+            .iter()
+            .filter_map(|id| {
+                let path = after.path_of(*id)?;
+                let (last, parent) = path.split_last()?;
+                let siblings = if parent.is_empty() { &after.layers } else { after.layer_at(parent)?.children()? };
+                let below = last.checked_sub(1).and_then(|i| siblings.get(i)).map(|l| l.id);
+                let above = siblings.get(last + 1).map(|l| l.id);
+                Some((*id, below, above))
+            })
+            .collect();
+        let selection = (before.selection != after.selection).then(|| after.selection.clone());
+        Baked { layers, placed, selection }
+    }
+
+    /// Put the stored layers into `doc` in place of the ones the step changed.
+    pub fn apply(&self, doc: &mut Document, created: &[LayerId], changed: &[LayerId]) {
+        if let Some(sel) = &self.selection {
+            doc.selection = sel.clone();
+        }
+        for id in changed {
+            match self.layers.iter().find(|l| l.id == *id) {
+                Some(l) => {
+                    if let Some(slot) = doc.layer_mut(*id) {
+                        *slot = l.clone();
+                    }
+                }
+                None => {
+                    doc.remove(*id);
+                }
+            }
+        }
+        for (id, below, above) in &self.placed {
+            let Some(l) = self.layers.iter().find(|l| l.id == *id).filter(|_| created.contains(id) && doc.layer(*id).is_none()) else { continue };
+            match (below.filter(|b| doc.layer(*b).is_some()), above.filter(|a| doc.layer(*a).is_some())) {
+                (Some(b), _) => doc.insert_above(Some(b), l.clone()),
+                (None, Some(a)) => doc.insert_below(Some(a), l.clone()),
+                (None, None) => doc.insert_above(None, l.clone()),
+            };
+        }
     }
 }
 
@@ -169,5 +230,23 @@ mod tests {
         let mut want = vec![cid, gid];
         want.sort_unstable();
         assert_eq!(changed, want);
+    }
+
+    #[test]
+    fn baked_layers_go_back_where_they_were() {
+        let mut before = Document::new("d", Size::new(4, 4), ColorMode::Rgb, SampleType::U8);
+        let (low, high) = (Layer::raster("low", PixelFormat::RGBA8), Layer::raster("high", PixelFormat::RGBA8));
+        let (lid, hid) = (low.id, high.id);
+        before.layers = vec![low, high];
+        let mut after = before.clone();
+        let mid = Layer::raster("mid", PixelFormat::RGBA8);
+        let mid_id = mid.id;
+        after.insert_above(Some(lid), mid);
+        after.layer_mut(hid).unwrap().opacity = 0.25;
+        let baked = Baked::capture(&before, &after, &[mid_id], &[hid]);
+        let mut doc = before.clone();
+        baked.apply(&mut doc, &[mid_id], &[hid]);
+        assert_eq!(doc, after);
+        assert_eq!(baked.selection, None, "the selection didn't change");
     }
 }

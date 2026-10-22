@@ -92,3 +92,222 @@ fn a_layer_named_in_params_is_recorded_by_id() {
     s.execute("layer.setProps", json!({"layer": "A", "visible": false})).unwrap();
     assert_eq!(steps(&mut s).last().unwrap()["params"]["layer"], json!(a.0));
 }
+
+fn state(s: &mut Session, i: usize) -> String {
+    steps(s)[i]["state"]["state"].as_str().unwrap().to_string()
+}
+
+fn step_id(s: &mut Session, i: usize) -> u64 {
+    steps(s)[i]["step"].as_u64().unwrap()
+}
+
+fn doc(s: &Session) -> photocraft_doc::Document {
+    let mut d = (*s.active().unwrap().doc).clone();
+    d.design_timeline = None;
+    d
+}
+
+/// Background, then A filled, B filled and blurred, A inverted, A hidden by id.
+fn script() -> Session {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    let a = s.active().unwrap().active_layer.unwrap().0;
+    s.execute("select.rect", json!({"x": 2, "y": 2, "width": 6, "height": 6})).unwrap();
+    s.execute("edit.fillForeground", json!({})).unwrap();
+    s.execute("layer.new.layer", json!({"name": "B"})).unwrap();
+    s.execute("select.rect", json!({"x": 8, "y": 4, "width": 6, "height": 6})).unwrap();
+    s.execute("edit.fillForeground", json!({})).unwrap();
+    s.execute("select.deselect", json!({})).unwrap();
+    s.execute("filter.blur.gaussianBlur", json!({"radius": 1})).unwrap();
+    s.execute("layer.select", json!({"layer": "A"})).unwrap();
+    s.execute("image.adjustments.invert", json!({})).unwrap();
+    s.execute("layer.setProps", json!({"layer": a, "visible": false})).unwrap();
+    s
+}
+
+#[test]
+fn replaying_everything_reproduces_the_document() {
+    let mut s = script();
+    let before = doc(&s);
+    s.execute("design.replay", json!({})).unwrap();
+    assert_eq!(doc(&s), before);
+    assert!(steps(&mut s).iter().all(|x| x["state"]["state"] == "ok"), "{:?}", steps(&mut s));
+}
+
+#[test]
+fn suppressing_a_layer_fails_the_steps_on_it_and_unsuppressing_restores() {
+    let mut s = script();
+    let before = doc(&s);
+    let new_a = step_id(&mut s, 0);
+    s.execute("design.suppress", json!({"step": new_a})).unwrap();
+    let names: Vec<String> = doc(&s).walk().into_iter().map(|(_, _, l)| l.name.clone()).collect();
+    assert!(!names.contains(&"A".to_string()) && names.contains(&"B".to_string()), "{names:?}");
+    // Fill A, invert A and hide A acted on the removed layer: they fail visibly, not elsewhere.
+    for i in [2, 8, 9] {
+        assert!(["missingReference", "retargeted"].contains(&state(&mut s, i).as_str()), "step {i}: {}", state(&mut s, i));
+    }
+    assert_eq!(state(&mut s, 3), "placedElsewhere", "B was placed above A, which is gone");
+    for i in [5, 7] {
+        assert_eq!(state(&mut s, i), "ok", "step {i} on B is unaffected");
+    }
+    s.execute("design.unsuppress", json!({"step": new_a})).unwrap();
+    assert_eq!(doc(&s), before);
+    s.execute("edit.undo", json!({})).unwrap();
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_eq!(doc(&s), before, "suppressing is undoable");
+}
+
+#[test]
+fn dropping_any_step_never_lands_a_later_step_on_another_layer() {
+    let n = steps(&mut script()).len();
+    for k in 0..n {
+        let mut s = script();
+        let id = step_id(&mut s, k);
+        s.execute("design.suppress", json!({"step": id})).unwrap();
+        let tl = s.active().unwrap().doc.design_timeline.clone().unwrap();
+        for (i, st) in tl.steps.iter().enumerate().skip(k + 1) {
+            // A step that ran had to stay within the layers it changed when recorded.
+            if st.state == photocraft_doc::design::StepState::Ok {
+                let pre = tl.steps[i - 1].checkpoint.0.clone().unwrap();
+                let post = st.checkpoint.0.clone().unwrap();
+                let (_, changed) = photocraft_doc::design::layer_changes(&pre, &post);
+                assert!(changed.iter().all(|id| st.changed.contains(id)), "drop {k}: step {i} {} retargeted", st.command);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_hidden_second_target_is_caught() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.execute("select.all", json!({})).unwrap();
+    s.execute("edit.fillForeground", json!({})).unwrap();
+    s.execute("layer.new.layer", json!({"name": "B"})).unwrap();
+    s.execute("edit.fillBackground", json!({})).unwrap();
+    s.execute("layer.mergeDown", json!({})).unwrap();
+    let new_a = step_id(&mut s, 0);
+    s.execute("design.suppress", json!({"step": new_a})).unwrap();
+    // Without A, Merge Down would merge B into the Background, a layer it never touched.
+    let last = steps(&mut s).len() - 1;
+    assert!(["retargeted", "missingReference"].contains(&state(&mut s, last).as_str()), "{}", state(&mut s, last));
+}
+
+#[test]
+fn rolling_back_shows_the_earlier_state_and_inserts_new_edits_there() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    let after_a = doc(&s);
+    s.execute("layer.new.layer", json!({"name": "B"})).unwrap();
+    s.execute("design.rollTo", json!({"at": 1})).unwrap();
+    assert_eq!(doc(&s), after_a);
+    s.execute("layer.setProps", json!({"opacity": 0.5})).unwrap();
+    assert_eq!(commands(&mut s), ["layer.new.layer", "layer.setProps", "layer.new.layer"]);
+    s.execute("design.rollTo", json!({"at": null})).unwrap();
+    let d = doc(&s);
+    let a = d.walk().into_iter().find(|(_, _, l)| l.name == "A").unwrap().2.opacity;
+    assert_eq!(a, 0.5);
+    assert!(d.walk().iter().any(|(_, _, l)| l.name == "B"), "B replays after the inserted step");
+}
+
+#[test]
+fn editing_and_deleting_steps() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.execute("layer.setProps", json!({"opacity": 0.5})).unwrap();
+    let props = step_id(&mut s, 1);
+    s.execute("design.editStep", json!({"step": props, "params": {"opacity": 0.25}})).unwrap();
+    let opacity = |s: &Session| doc(s).walk().into_iter().find(|(_, _, l)| l.name == "A").unwrap().2.opacity;
+    assert_eq!(opacity(&s), 0.25);
+    s.execute("design.delete", json!({"step": props})).unwrap();
+    assert_eq!(opacity(&s), 1.0);
+    assert_eq!(commands(&mut s), ["layer.new.layer"]);
+}
+
+#[test]
+fn a_change_the_timeline_did_not_record_is_never_replayed_away() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.edit("Unrecorded", |doc, _| {
+        doc.name = "renamed outside a command".into();
+        Ok(())
+    })
+    .unwrap();
+    let err = s.execute("design.replay", json!({})).unwrap_err().to_string();
+    assert!(err.contains("didn't record"), "{err}");
+}
+
+#[test]
+fn every_step_has_its_own_id() {
+    let mut s = script();
+    let mut ids: Vec<u64> = steps(&mut s).iter().map(|x| x["step"].as_u64().unwrap()).collect();
+    let n = ids.len();
+    ids.dedup();
+    assert_eq!(ids.len(), n, "steps that mint no layer still get their own id");
+}
+
+#[test]
+fn a_step_that_would_change_another_layer_is_refused() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.execute("select.all", json!({})).unwrap();
+    s.execute("edit.fillForeground", json!({})).unwrap();
+    s.execute("layer.new.layer", json!({"name": "B"})).unwrap();
+    s.execute("edit.fillForeground", json!({})).unwrap();
+    s.execute("layer.mergeDown", json!({})).unwrap();
+    let before = doc(&s);
+    // Roll back to before the merge and move B under A: the merge would now hit the Background.
+    s.execute("design.rollTo", json!({"at": 5})).unwrap();
+    s.execute("layer.arrange.sendBackward", json!({})).unwrap();
+    s.execute("design.rollTo", json!({"at": null})).unwrap();
+    let last = steps(&mut s).len() - 1;
+    assert_eq!(state(&mut s, last), "retargeted");
+    let bg = doc(&s).layers[0].clone();
+    assert_eq!(bg, before.layers[0], "the Background is untouched");
+}
+
+#[test]
+fn an_edited_step_may_target_another_layer() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    let a = s.active().unwrap().active_layer.unwrap().0;
+    s.execute("layer.new.layer", json!({"name": "B"})).unwrap();
+    s.execute("layer.setProps", json!({"opacity": 0.5})).unwrap();
+    let props = step_id(&mut s, 2);
+    s.execute("design.editStep", json!({"step": props, "params": {"layer": a, "opacity": 0.5}})).unwrap();
+    assert_eq!(state(&mut s, 2), "ok");
+    assert_eq!(steps(&mut s)[2]["changed"], json!([a]));
+}
+
+#[test]
+fn bad_params_are_errors() {
+    let mut s = script();
+    let bad = [json!(null), json!({}), json!({"step": -1}), json!({"step": "x"}), json!({"step": u64::MAX}), json!({"at": 999}), json!({"at": -3}), json!({"step": 1, "params": 5})];
+    for id in ["design.suppress", "design.unsuppress", "design.delete", "design.rollTo", "design.editStep"] {
+        for p in &bad {
+            let _ = s.execute(id, p.clone());
+        }
+    }
+    assert!(s.execute("design.start", json!({})).is_err(), "already on");
+    s.execute("design.replay", json!({})).unwrap();
+}
+
+#[test]
+fn a_baked_step_replays_its_result_and_goes_stale_after_an_earlier_change() {
+    let mut s = started();
+    s.execute("select.rect", json!({"x": 1, "y": 1, "width": 5, "height": 5})).unwrap();
+    s.execute("select.deselect", json!({})).unwrap();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.execute("select.reselect", json!({})).unwrap();
+    let st = steps(&mut s);
+    assert_eq!(st[3]["baked"], true);
+    let before = doc(&s);
+    // The scratch session replay runs in has no selection to reselect: the stored one is used.
+    s.execute("design.replay", json!({})).unwrap();
+    assert_eq!(doc(&s), before);
+    assert_eq!(state(&mut s, 3), "ok");
+    let new_a = step_id(&mut s, 2);
+    s.execute("design.suppress", json!({"step": new_a})).unwrap();
+    assert_eq!(state(&mut s, 3), "stale");
+    assert!(doc(&s).selection.is_some(), "a stale step still applies its result");
+}

@@ -3,10 +3,12 @@
 
 use std::sync::Arc;
 
+use photocraft_doc::Document;
 use photocraft_doc::design::DesignTimeline;
 use serde_json::{Value, json};
 
 use crate::commands::CommandSpec;
+pub use crate::timeline::BAKED;
 use crate::{EngineError, Result, Session};
 
 fn timeline_of(s: &Session) -> std::result::Result<&Arc<DesignTimeline>, String> {
@@ -54,6 +56,123 @@ fn list(s: &mut Session, _: &Value) -> Result<Value> {
     Ok(json!({"steps": steps, "marker": tl.marker, "inEffect": tl.in_effect()}))
 }
 
+fn bad(cmd: &str, msg: impl Into<String>) -> EngineError {
+    EngineError::BadParams { cmd: cmd.into(), msg: msg.into() }
+}
+
+/// The index of the step named by `"step"` (its id, as `design.list` gives it).
+fn step_index(cmd: &str, tl: &DesignTimeline, p: &Value) -> Result<usize> {
+    let id = p.get("step").and_then(Value::as_u64).ok_or_else(|| bad(cmd, "`step` must be a step id from design.list"))?;
+    tl.index_of(id).ok_or_else(|| bad(cmd, format!("no step {id} in the design timeline")))
+}
+
+/// `a` and `b` are the same document, whatever their timelines hold.
+fn same_content(a: &Document, b: &Document) -> bool {
+    let strip = |d: &Document| Document { design_timeline: None, ..d.clone() };
+    strip(a) == strip(b)
+}
+
+/// Change the active document's timeline with `f` (which returns the first step it affects),
+/// replay from there and commit the result as one undo step named `label`.
+/// `f` returns the first step to replay from and whether that step itself changed (so baked steps
+/// after it may be out of date).
+fn change(s: &mut Session, cmd: &str, label: &str, f: impl FnOnce(&mut DesignTimeline) -> Result<(usize, bool)>) -> Result<Value> {
+    let st = s.active().ok_or(EngineError::NoDocument)?;
+    let tl = st.doc.design_timeline.clone().ok_or_else(|| EngineError::Other("the design timeline is off".into()))?;
+    // Replay rebuilds the document from recorded steps: a change made around them would be lost.
+    let last = match tl.in_effect() {
+        0 => Some(tl.base.clone()),
+        n => tl.steps.get(n - 1).and_then(|st| st.checkpoint.0.clone()),
+    };
+    if last.is_some_and(|last| !same_content(&last, &st.doc)) {
+        return Err(EngineError::Other(format!("`{cmd}`: the document has changes the design timeline didn't record; stop and restart the timeline to keep them")));
+    }
+    let mut next = (*tl).clone();
+    let (from, changed) = f(&mut next)?;
+    let mut replayed = crate::timeline::replay(s, &next, from, changed.then_some(from))?;
+    if let Some(st) = s.active() {
+        crate::timeline::budget_checkpoints(&st.history, &st.doc, &mut replayed.timeline);
+    }
+    let crate::timeline::Replayed { doc: result, timeline, active, selected } = replayed;
+    s.edit(label, |doc, act| {
+        let id = doc.id;
+        *doc = result;
+        doc.id = id;
+        doc.design_timeline = Some(Arc::new(timeline));
+        *act = active;
+        Ok(())
+    })?;
+    if let Some(st) = s.active_mut() {
+        st.selected_layers = selected;
+        st.layer_anchor = st.active_layer;
+    }
+    list(s, &Value::Null)
+}
+
+fn suppress(s: &mut Session, p: &Value, on: bool) -> Result<Value> {
+    let (cmd, label) = if on { ("design.suppress", "Suppress Step") } else { ("design.unsuppress", "Unsuppress Step") };
+    change(s, cmd, label, |tl| {
+        let i = step_index(cmd, tl, p)?;
+        if let Some(st) = tl.steps.get_mut(i) {
+            st.suppressed = on;
+        }
+        Ok((i, true))
+    })
+}
+
+fn delete(s: &mut Session, p: &Value) -> Result<Value> {
+    change(s, "design.delete", "Delete Step", |tl| {
+        let i = step_index("design.delete", tl, p)?;
+        tl.steps.remove(i);
+        if let Some(m) = tl.marker.as_mut()
+            && i < *m
+        {
+            *m -= 1;
+        }
+        Ok((i, true))
+    })
+}
+
+fn roll_to(s: &mut Session, p: &Value) -> Result<Value> {
+    change(s, "design.rollTo", "Move Timeline Marker", |tl| {
+        let was = tl.in_effect();
+        let at = match p.get("at") {
+            None | Some(Value::Null) => None,
+            Some(v) => Some(v.as_u64().and_then(|n| usize::try_from(n).ok()).filter(|n| *n <= tl.steps.len()).ok_or_else(|| {
+                bad("design.rollTo", format!("`at` must be a step count from 0 to {} (null = the end)", tl.steps.len()))
+            })?),
+        };
+        tl.marker = at.filter(|n| *n < tl.steps.len());
+        Ok((was.min(tl.in_effect()), false))
+    })
+}
+
+fn edit_step(s: &mut Session, p: &Value) -> Result<Value> {
+    change(s, "design.editStep", "Edit Step", |tl| {
+        let i = step_index("design.editStep", tl, p)?;
+        let params = p.get("params").filter(|v| v.is_object()).ok_or_else(|| bad("design.editStep", "`params` must be an object"))?;
+        if let Some(st) = tl.steps.get_mut(i) {
+            st.params = params.clone();
+            st.rerecord = true;
+        }
+        Ok((i, true))
+    })
+}
+
+fn replay_all(s: &mut Session, _: &Value) -> Result<Value> {
+    change(s, "design.replay", "Replay Timeline", |_| Ok((0, false)))
+}
+
+fn has_timeline(s: &Session) -> std::result::Result<(), String> {
+    timeline_of(s).map(|_| ())
+}
+
+macro_rules! step_cmd {
+    ($id:expr, $label:expr, $params:expr, $run:expr) => {
+        CommandSpec { id: $id, label: $label, menu: &[], shortcut: None, params: $params, enabled: has_timeline, run: $run, journal: true }
+    };
+}
+
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec {
@@ -72,7 +191,7 @@ pub fn specs() -> Vec<CommandSpec> {
             menu: &[],
             shortcut: None,
             params: "{}",
-            enabled: |s| timeline_of(s).map(|_| ()),
+            enabled: has_timeline,
             run: stop,
             journal: true,
         },
@@ -82,10 +201,16 @@ pub fn specs() -> Vec<CommandSpec> {
             menu: &[],
             shortcut: None,
             params: "{} → {steps:[{step,command,label,params,suppressed,joinsPrevious,baked,created,changed,state}],marker,inEffect}",
-            enabled: |s| timeline_of(s).map(|_| ()),
+            enabled: has_timeline,
             run: list,
             journal: false,
         },
+        step_cmd!("design.suppress", "Suppress Step", "{step} → design.list (replays the steps after it)", |s, p| suppress(s, p, true)),
+        step_cmd!("design.unsuppress", "Unsuppress Step", "{step} → design.list", |s, p| suppress(s, p, false)),
+        step_cmd!("design.delete", "Delete Step", "{step} → design.list", delete),
+        step_cmd!("design.rollTo", "Move Timeline Marker", "{at: steps in effect, null = the end} → design.list (new edits go in at the marker)", roll_to),
+        step_cmd!("design.editStep", "Edit Step", "{step, params} → design.list (replays the step with new params)", edit_step),
+        step_cmd!("design.replay", "Replay Timeline", "{} → design.list (re-runs every step)", replay_all),
     ]
 }
 

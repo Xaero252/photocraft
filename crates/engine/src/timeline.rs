@@ -24,6 +24,10 @@ pub(crate) struct Before {
 /// undo, navigation) must never run again on replay.
 const PRELUDE: &[&str] = &["tools.", "tool.", "brush.", "gradient.", "pattern.", "cloneSource.", "paint.", "type.", "shape.", "swatches.", "color."];
 
+/// Commands that don't replay identically (found by the `design_replay_audit` test): their steps
+/// keep the layers they produced and replay those instead of running again.
+pub const BAKED: &[&str] = &["select.reselect"];
+
 /// Every document with a timeline, before a command runs (empty when none has one).
 pub(crate) fn capture(s: &Session) -> Vec<Before> {
     s.docs
@@ -57,6 +61,7 @@ pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, 
             continue;
         }
         let (created, changed) = layer_changes(&b.state, &st.doc);
+        let baked = BAKED.contains(&id).then(|| Arc::new(photocraft_doc::design::Baked::capture(&b.state, &st.doc, &created, &changed)));
         let entry = DesignStep {
             step,
             command: id.to_string(),
@@ -69,10 +74,12 @@ pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, 
             changed,
             suppressed: false,
             joins_previous: st.history.row_id(st.history.past_len()) == b.history_row,
-            baked: None,
+            baked,
+            rerecord: false,
             state: StepState::Ok,
             checkpoint: Checkpoint(Some(st.doc.clone())),
         };
+        let current = st.doc.clone();
         let doc = Arc::make_mut(&mut st.doc);
         let Some(tl) = doc.design_timeline.as_mut() else { continue };
         let tl = Arc::make_mut(tl);
@@ -85,6 +92,7 @@ pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, 
                 later.checkpoint = Checkpoint(None);
             }
         }
+        budget_checkpoints(&st.history, &current, tl);
         recorded = true;
     }
     if recorded {
@@ -105,4 +113,139 @@ fn resolve_names(doc: &Document, params: &Value) -> Value {
         *slot = Value::from(l.id.0);
     }
     p
+}
+
+/// A timeline replayed from some step on.
+pub(crate) struct Replayed {
+    pub doc: Document,
+    pub timeline: photocraft_doc::design::DesignTimeline,
+    pub active: Option<LayerId>,
+    pub selected: Vec<LayerId>,
+}
+
+/// A session to replay in: `doc` alone, with this session's tool, preset and preference state,
+/// so the live session's history, jobs and journal are untouched.
+fn scratch(s: &Session, doc: &Document) -> Session {
+    let mut r = Session::new();
+    r.tools = s.tools.clone();
+    r.prefs = s.prefs.clone();
+    r.patterns = s.patterns.clone();
+    r.presets = s.presets.clone();
+    r.type_defaults = s.type_defaults.clone();
+    r.quick_mask_options = s.quick_mask_options;
+    r.authorize = s.authorize;
+    let mut doc = doc.clone();
+    doc.design_timeline = None;
+    r.add_document(doc, None);
+    r
+}
+
+/// The document `tl` produces from the first step at or before `from` with a checkpoint to the
+/// marker, with every replayed step's outcome and checkpoint updated.
+/// Baked steps after `changed` (the step the change was made at) are marked stale.
+pub(crate) fn replay(s: &Session, tl: &photocraft_doc::design::DesignTimeline, from: usize, changed: Option<usize>) -> crate::Result<Replayed> {
+    let mut tl = tl.clone();
+    let end = tl.in_effect();
+    let mut start = from.min(end);
+    while start > 0 && tl.steps.get(start - 1).is_none_or(|st| st.checkpoint.0.is_none()) {
+        start -= 1;
+    }
+    let resume = match start {
+        0 => tl.base.clone(),
+        k => tl.steps.get(k - 1).and_then(|st| st.checkpoint.0.clone()).ok_or_else(|| crate::EngineError::Other("internal error: no checkpoint to replay from".into()))?,
+    };
+    let mut r = scratch(s, &resume);
+    for (i, step) in tl.steps.iter_mut().enumerate().take(end).skip(start) {
+        let stale = step.baked.is_some() && (step.state == StepState::Stale || changed.is_some_and(|c| i > c));
+        run_step(&mut r, step);
+        if stale && !step.state.is_failure() {
+            step.state = StepState::Stale;
+        }
+    }
+    // Steps past the marker resume from it when rolled forward.
+    for later in tl.steps.iter_mut().skip(end) {
+        later.checkpoint = Checkpoint(None);
+    }
+    let st = r.active().ok_or(crate::EngineError::NoDocument)?;
+    Ok(Replayed { doc: (*st.doc).clone(), active: st.active_layer, selected: st.selected_layers.clone(), timeline: tl })
+}
+
+/// Replay one step in `r`, setting its outcome and checkpoint.
+fn run_step(r: &mut Session, step: &mut DesignStep) {
+    let Some(pre) = r.active().map(|st| st.doc.clone()) else { return };
+    let finish = |r: &mut Session, step: &mut DesignStep, state: StepState| {
+        step.state = state;
+        step.checkpoint = Checkpoint(r.active().map(|st| st.doc.clone()));
+    };
+    if step.suppressed {
+        return finish(r, step, StepState::Ok);
+    }
+    let missing: Vec<LayerId> = step.changed.iter().copied().filter(|id| pre.layer(*id).is_none()).collect();
+    if !missing.is_empty() {
+        return finish(r, step, StepState::MissingReference { layers: missing });
+    }
+    let placed_elsewhere = step.active.is_some_and(|a| pre.layer(a).is_none()) && !step.created.is_empty();
+    for p in &step.prelude {
+        // A tool setting that no longer applies leaves the tool as it is.
+        let _ = r.execute(&p.command, p.params.clone());
+    }
+    if let Some(st) = r.active_mut() {
+        st.active_layer = step.active.filter(|a| pre.layer(*a).is_some());
+        st.selected_layers = step.selected.iter().copied().filter(|id| pre.layer(*id).is_some()).collect();
+        st.layer_anchor = st.active_layer;
+    }
+    let ran = match step.baked.clone().filter(|_| !step.rerecord) {
+        Some(baked) => apply_baked(r, step, &baked),
+        None => {
+            let _scope = photocraft_doc::IdScope::new(step.step).enter();
+            r.execute(&step.command, step.params.clone()).map(|_| ())
+        }
+    };
+    let restore = |r: &mut Session| {
+        if let Some(st) = r.active_mut() {
+            st.doc = pre.clone();
+        }
+    };
+    if let Err(e) = ran {
+        restore(r);
+        return finish(r, step, StepState::Error { message: e.to_string() });
+    }
+    let Some(post) = r.active().map(|st| st.doc.clone()) else { return };
+    let (created, changed) = layer_changes(&pre, &post);
+    if step.rerecord {
+        if step.baked.is_some() {
+            step.baked = Some(Arc::new(photocraft_doc::design::Baked::capture(&pre, &post, &created, &changed)));
+        }
+        (step.created, step.changed, step.rerecord) = (created, changed, false);
+        return finish(r, step, StepState::Ok);
+    }
+    let foreign: Vec<LayerId> = changed.into_iter().filter(|id| !step.changed.contains(id)).collect();
+    if !foreign.is_empty() {
+        restore(r);
+        return finish(r, step, StepState::Retargeted { layers: foreign });
+    }
+    finish(r, step, if placed_elsewhere { StepState::PlacedElsewhere } else { StepState::Ok });
+}
+
+fn apply_baked(r: &mut Session, step: &DesignStep, baked: &photocraft_doc::design::Baked) -> crate::Result<()> {
+    let st = r.active_mut().ok_or(crate::EngineError::NoDocument)?;
+    let mut doc = (*st.doc).clone();
+    baked.apply(&mut doc, &step.created, &step.changed);
+    st.doc = Arc::new(doc);
+    Ok(())
+}
+
+/// Drop the oldest checkpoints while the pixels only they hold exceed a quarter of the history
+/// budget. The base and the newest checkpoint are kept.
+pub(crate) fn budget_checkpoints(history: &photocraft_ops::History, current: &Document, tl: &mut photocraft_doc::design::DesignTimeline) {
+    let cap = history.max_bytes / 4;
+    loop {
+        let held: Vec<&Document> = tl.steps.iter().filter_map(|st| st.checkpoint.0.as_deref()).collect();
+        if held.len() <= 1 || history.extra_bytes(current, &held) <= cap {
+            return;
+        }
+        if let Some(oldest) = tl.steps.iter_mut().find(|st| st.checkpoint.0.is_some()) {
+            oldest.checkpoint = Checkpoint(None);
+        }
+    }
 }
