@@ -4374,9 +4374,11 @@ shape	Appearance	Izgled
 	Design Timeline	Vremenska linija dizajna
 	Start Design Timeline	Pokreni vremensku liniju dizajna
 	Stop Design Timeline	Zaustavi vremensku liniju dizajna
-	Marker	Oznaka
 	Roll to End	Idi na kraj
-	Roll Back to Here	Vrati se ovde
+	Roll to Start	Idi na početak
+	Roll to Here	Idi dovde
+	Edit Parameters…	Uredi parametre…
+	This step has no dialog to edit.	Ovaj korak nema dijalog za uređivanje.
 	Suppress	Potisni
 	Unsuppress	Ukini potiskivanje
 	No steps yet: edits to this document appear here.	Još nema koraka: ovde se pojavljuju izmene ovog dokumenta.

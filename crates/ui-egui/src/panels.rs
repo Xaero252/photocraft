@@ -1926,7 +1926,8 @@ pub(crate) fn dock_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, group: crate
         (Group::Navigator, _) => info_panel(app, ui),
         (Group::History, 0) => history(app, ui),
         (Group::History, 1) => crate::actions::panel(app, ui),
-        (Group::History, _) => crate::comps_ui::panel(app, ui),
+        (Group::History, 2) => crate::comps_ui::panel(app, ui),
+        (Group::History, _) => crate::design_timeline_ui::list(app, ui),
         (Group::Layers, 0) => layers(app, ui),
         (Group::Layers, 1) => channels(app, ui),
         (Group::Layers, _) => crate::vector_ui::paths_panel(app, ui),
@@ -3551,16 +3552,7 @@ fn history(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             } else if resp.hovered() {
                 ui.painter().rect_filled(rect, 0.0, t.hover.gamma_multiply(0.5));
             }
-            let icon = match e.as_str() {
-                s if s.contains("Brush") || s.contains("Eraser") => "brush",
-                // The Layers panel's controls (layer.setProps).
-                "Opacity Change" | "Fill Opacity Change" | "Blending Change" => "layers",
-                s if s.contains("Layer") => "layers",
-                s if s.contains("Select") || s.contains("Marquee") || s.contains("Deselect") || s.contains("Lasso") => "square-dashed",
-                s if s.contains("Fill") => "paint-bucket",
-                "Open" => "image",
-                _ => "sliders-horizontal",
-            };
+            let icon = icons::step_icon(e.as_str());
             let color = if is_redo { t.text_faint } else { t.text };
             icons::paint(
                 ui,

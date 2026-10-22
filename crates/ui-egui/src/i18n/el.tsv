@@ -4003,9 +4003,11 @@ curves	Smooth	Εξομάλυνση
 	Design Timeline	Χρονογραμμή σχεδίασης
 	Start Design Timeline	Έναρξη χρονογραμμής σχεδίασης
 	Stop Design Timeline	Διακοπή χρονογραμμής σχεδίασης
-	Marker	Δείκτης
 	Roll to End	Μετάβαση στο τέλος
-	Roll Back to Here	Επαναφορά έως εδώ
+	Roll to Start	Μετάβαση στην αρχή
+	Roll to Here	Μετάβαση εδώ
+	Edit Parameters…	Επεξεργασία παραμέτρων…
+	This step has no dialog to edit.	Αυτό το βήμα δεν έχει παράθυρο διαλόγου για επεξεργασία.
 	Suppress	Αναστολή
 	Unsuppress	Άρση αναστολής
 	No steps yet: edits to this document appear here.	Δεν υπάρχουν ακόμη βήματα: οι επεξεργασίες αυτού του εγγράφου εμφανίζονται εδώ.

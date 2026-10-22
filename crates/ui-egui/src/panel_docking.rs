@@ -22,6 +22,7 @@ const PANELS: &[(&str, &str, Group)] = &[
     ("history", "History", Group::History),
     ("actions", "Actions", Group::History),
     ("layerComps", "Layer Comps", Group::History),
+    ("designTimeline", "Design Timeline", Group::History),
     ("layers", "Layers", Group::Layers),
     ("channels", "Channels", Group::Layers),
     ("paths", "Paths", Group::Layers),

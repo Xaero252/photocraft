@@ -4093,9 +4093,11 @@ layerLabel	No Color	Sem cor
 	Design Timeline	Linha do tempo de design
 	Start Design Timeline	Iniciar linha do tempo de design
 	Stop Design Timeline	Parar linha do tempo de design
-	Marker	Marcador
 	Roll to End	Avançar até o fim
-	Roll Back to Here	Voltar até aqui
+	Roll to Start	Voltar ao início
+	Roll to Here	Ir até aqui
+	Edit Parameters…	Editar parâmetros…
+	This step has no dialog to edit.	Esta etapa não tem uma caixa de diálogo para editar.
 	Suppress	Suprimir
 	Unsuppress	Deixar de suprimir
 	No steps yet: edits to this document appear here.	Ainda não há etapas: as edições deste documento aparecem aqui.

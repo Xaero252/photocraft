@@ -4012,9 +4012,11 @@ curves	Smooth	Згладити
 	Design Timeline	Шкала дизайну
 	Start Design Timeline	Почати шкалу дизайну
 	Stop Design Timeline	Зупинити шкалу дизайну
-	Marker	Маркер
 	Roll to End	Перейти в кінець
-	Roll Back to Here	Відкотити сюди
+	Roll to Start	Перейти на початок
+	Roll to Here	Перейти сюди
+	Edit Parameters…	Змінити параметри…
+	This step has no dialog to edit.	Цей крок не має діалогу для змінення.
 	Suppress	Придушити
 	Unsuppress	Скасувати придушення
 	No steps yet: edits to this document appear here.	Кроків ще немає: тут з’являться зміни цього документа.

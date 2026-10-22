@@ -2923,9 +2923,11 @@ curves	Smooth	平滑
 	Design Timeline	設計時間軸
 	Start Design Timeline	開始設計時間軸
 	Stop Design Timeline	停止設計時間軸
-	Marker	標記
 	Roll to End	前進到結尾
-	Roll Back to Here	回到此處
+	Roll to Start	回到開頭
+	Roll to Here	移到此處
+	Edit Parameters…	編輯參數…
+	This step has no dialog to edit.	此步驟沒有可編輯的對話框。
 	Suppress	抑制
 	Unsuppress	取消抑制
 	No steps yet: edits to this document appear here.	尚無步驟：此文件的編輯會顯示在這裡。

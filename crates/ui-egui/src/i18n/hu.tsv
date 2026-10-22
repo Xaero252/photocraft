@@ -4220,9 +4220,11 @@ cameraRaw	Yellow	Sárga
 	Design Timeline	Tervezési idővonal
 	Start Design Timeline	Tervezési idővonal indítása
 	Stop Design Timeline	Tervezési idővonal leállítása
-	Marker	Jelölő
 	Roll to End	Ugrás a végére
-	Roll Back to Here	Visszaállás idáig
+	Roll to Start	Ugrás az elejére
+	Roll to Here	Ugrás ide
+	Edit Parameters…	Paraméterek szerkesztése…
+	This step has no dialog to edit.	Ennek a lépésnek nincs szerkeszthető párbeszédablaka.
 	Suppress	Kihagyás
 	Unsuppress	Kihagyás visszavonása
 	No steps yet: edits to this document appear here.	Még nincsenek lépések: a dokumentum szerkesztései itt jelennek meg.

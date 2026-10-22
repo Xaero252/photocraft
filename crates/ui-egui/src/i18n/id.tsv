@@ -3301,9 +3301,11 @@ curves	Smooth	Haluskan
 	Design Timeline	Timeline Desain
 	Start Design Timeline	Mulai Timeline Desain
 	Stop Design Timeline	Hentikan Timeline Desain
-	Marker	Penanda
 	Roll to End	Maju ke Akhir
-	Roll Back to Here	Kembali ke Sini
+	Roll to Start	Mundur ke Awal
+	Roll to Here	Pindah ke Sini
+	Edit Parameters…	Edit Parameter…
+	This step has no dialog to edit.	Langkah ini tidak memiliki dialog untuk diedit.
 	Suppress	Tekan
 	Unsuppress	Batalkan Tekan
 	No steps yet: edits to this document appear here.	Belum ada langkah: suntingan pada dokumen ini muncul di sini.

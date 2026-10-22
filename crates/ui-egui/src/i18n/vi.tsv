@@ -3794,9 +3794,11 @@ curves	Smooth	Làm mượt
 	Design Timeline	Dòng thời gian thiết kế
 	Start Design Timeline	Bắt đầu dòng thời gian thiết kế
 	Stop Design Timeline	Dừng dòng thời gian thiết kế
-	Marker	Mốc
 	Roll to End	Tiến đến cuối
-	Roll Back to Here	Quay lại đến đây
+	Roll to Start	Lùi về đầu
+	Roll to Here	Đến đây
+	Edit Parameters…	Sửa tham số…
+	This step has no dialog to edit.	Bước này không có hộp thoại để sửa.
 	Suppress	Tạm bỏ
 	Unsuppress	Bỏ tạm bỏ
 	No steps yet: edits to this document appear here.	Chưa có bước nào: các chỉnh sửa trên tài liệu này sẽ hiện ở đây.

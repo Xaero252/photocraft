@@ -3914,9 +3914,11 @@ navigator	Zoom	Zvětšení
 	Design Timeline	Časová osa návrhu
 	Start Design Timeline	Spustit časovou osu návrhu
 	Stop Design Timeline	Zastavit časovou osu návrhu
-	Marker	Značka
 	Roll to End	Přejít na konec
-	Roll Back to Here	Vrátit sem
+	Roll to Start	Přejít na začátek
+	Roll to Here	Přejít sem
+	Edit Parameters…	Upravit parametry…
+	This step has no dialog to edit.	Tento krok nemá dialog k úpravě.
 	Suppress	Potlačit
 	Unsuppress	Zrušit potlačení
 	No steps yet: edits to this document appear here.	Zatím žádné kroky: zde se zobrazí úpravy tohoto dokumentu.

@@ -4063,9 +4063,11 @@ curves	Smooth	Vloeiend maken
 	Design Timeline	Ontwerptijdlijn
 	Start Design Timeline	Ontwerptijdlijn starten
 	Stop Design Timeline	Ontwerptijdlijn stoppen
-	Marker	Markering
 	Roll to End	Naar het einde
-	Roll Back to Here	Terug tot hier
+	Roll to Start	Naar het begin
+	Roll to Here	Tot hier
+	Edit Parameters…	Parameters bewerken…
+	This step has no dialog to edit.	Deze stap heeft geen dialoogvenster om te bewerken.
 	Suppress	Onderdrukken
 	Unsuppress	Niet meer onderdrukken
 	No steps yet: edits to this document appear here.	Nog geen stappen: bewerkingen van dit document verschijnen hier.

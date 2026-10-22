@@ -3903,9 +3903,11 @@ curves	Smooth	Wygładź
 	Design Timeline	Oś czasu projektu
 	Start Design Timeline	Rozpocznij oś czasu projektu
 	Stop Design Timeline	Zatrzymaj oś czasu projektu
-	Marker	Znacznik
 	Roll to End	Przejdź do końca
-	Roll Back to Here	Cofnij do tego miejsca
+	Roll to Start	Przejdź do początku
+	Roll to Here	Przejdź tutaj
+	Edit Parameters…	Edytuj parametry…
+	This step has no dialog to edit.	Ten krok nie ma okna dialogowego do edycji.
 	Suppress	Wstrzymaj
 	Unsuppress	Przywróć
 	No steps yet: edits to this document appear here.	Brak kroków: tu pojawią się zmiany w tym dokumencie.

@@ -3281,9 +3281,11 @@ curves	Smooth	Сгладить
 	Design Timeline	Шкала дизайна
 	Start Design Timeline	Начать шкалу дизайна
 	Stop Design Timeline	Остановить шкалу дизайна
-	Marker	Маркер
 	Roll to End	Перейти в конец
-	Roll Back to Here	Откатить сюда
+	Roll to Start	Перейти в начало
+	Roll to Here	Перейти сюда
+	Edit Parameters…	Изменить параметры…
+	This step has no dialog to edit.	У этого шага нет диалога для изменения.
 	Suppress	Подавить
 	Unsuppress	Отменить подавление
 	No steps yet: edits to this document appear here.	Шагов пока нет: здесь появятся правки этого документа.

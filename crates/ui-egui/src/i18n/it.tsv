@@ -4420,9 +4420,11 @@ shape	Appearance	Aspetto
 	Design Timeline	Timeline di progettazione
 	Start Design Timeline	Avvia timeline di progettazione
 	Stop Design Timeline	Interrompi timeline di progettazione
-	Marker	Indicatore
 	Roll to End	Vai alla fine
-	Roll Back to Here	Torna fin qui
+	Roll to Start	Vai all’inizio
+	Roll to Here	Vai fin qui
+	Edit Parameters…	Modifica parametri…
+	This step has no dialog to edit.	Questo passaggio non ha una finestra di dialogo da modificare.
 	Suppress	Sopprimi
 	Unsuppress	Annulla soppressione
 	No steps yet: edits to this document appear here.	Ancora nessun passaggio: qui compaiono le modifiche a questo documento.

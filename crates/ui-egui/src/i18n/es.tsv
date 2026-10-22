@@ -4265,9 +4265,11 @@ navigator	Zoom	Zoom
 	Design Timeline	Línea de tiempo de diseño
 	Start Design Timeline	Iniciar línea de tiempo de diseño
 	Stop Design Timeline	Detener línea de tiempo de diseño
-	Marker	Marcador
 	Roll to End	Avanzar hasta el final
-	Roll Back to Here	Retroceder hasta aquí
+	Roll to Start	Retroceder hasta el inicio
+	Roll to Here	Ir hasta aquí
+	Edit Parameters…	Editar parámetros…
+	This step has no dialog to edit.	Este paso no tiene un cuadro de diálogo para editar.
 	Suppress	Suprimir
 	Unsuppress	Dejar de suprimir
 	No steps yet: edits to this document appear here.	Aún no hay pasos: las ediciones de este documento aparecen aquí.

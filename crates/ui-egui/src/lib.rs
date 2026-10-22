@@ -2252,6 +2252,9 @@ impl eframe::App for PhotocraftApp {
         if (chrome && self.ui.panels.dock) || tabbed_in {
             panels::right_dock(self, ui);
         }
+        if chrome {
+            design_timeline_ui::strip(self, ui);
+        }
         let t = theme::Tokens::get(&ctx);
         let backdrop = if chrome { prefs_ui::pasteboard_color(self).unwrap_or(t.canvas) } else { egui::Color32::BLACK };
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(backdrop)).show(ui, |ui| {
@@ -2264,7 +2267,6 @@ impl eframe::App for PhotocraftApp {
         type_panels_ui::windows(self, &ctx);
         analysis_ui::windows(self, &ctx);
         timeline_ui::windows(self, &ctx);
-        design_timeline_ui::windows(self, &ctx);
         workspace_ui::windows(self, &ctx);
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);

@@ -3493,9 +3493,11 @@ curves	Smooth	매끄럽게
 	Design Timeline	디자인 타임라인
 	Start Design Timeline	디자인 타임라인 시작
 	Stop Design Timeline	디자인 타임라인 중지
-	Marker	마커
 	Roll to End	끝으로 이동
-	Roll Back to Here	여기로 되돌리기
+	Roll to Start	처음으로 이동
+	Roll to Here	여기로 이동
+	Edit Parameters…	매개변수 편집…
+	This step has no dialog to edit.	이 단계에는 편집할 대화 상자가 없습니다.
 	Suppress	억제
 	Unsuppress	억제 해제
 	No steps yet: edits to this document appear here.	아직 단계가 없습니다. 이 문서의 편집 내용이 여기에 표시됩니다.

@@ -3312,9 +3312,11 @@ curves	Smooth	Glätten
 	Design Timeline	Design-Zeitleiste
 	Start Design Timeline	Design-Zeitleiste starten
 	Stop Design Timeline	Design-Zeitleiste beenden
-	Marker	Marke
 	Roll to End	Bis zum Ende
-	Roll Back to Here	Bis hierher zurück
+	Roll to Start	Zum Anfang
+	Roll to Here	Bis hierher
+	Edit Parameters…	Parameter bearbeiten…
+	This step has no dialog to edit.	Dieser Schritt hat keinen Dialog zum Bearbeiten.
 	Suppress	Unterdrücken
 	Unsuppress	Nicht mehr unterdrücken
 	No steps yet: edits to this document appear here.	Noch keine Schritte: Bearbeitungen dieses Dokuments erscheinen hier.

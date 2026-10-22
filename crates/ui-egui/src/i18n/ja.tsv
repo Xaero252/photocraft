@@ -3981,9 +3981,11 @@ curves	Smooth	スムーズ
 	Design Timeline	デザインタイムライン
 	Start Design Timeline	デザインタイムラインを開始
 	Stop Design Timeline	デザインタイムラインを停止
-	Marker	マーカー
 	Roll to End	最後まで進める
-	Roll Back to Here	ここまで戻す
+	Roll to Start	最初まで戻す
+	Roll to Here	ここまで移動
+	Edit Parameters…	パラメーターを編集…
+	This step has no dialog to edit.	このステップには編集できるダイアログがありません。
 	Suppress	抑制
 	Unsuppress	抑制を解除
 	No steps yet: edits to this document appear here.	まだステップはありません。このドキュメントの編集がここに表示されます。
