@@ -77,3 +77,24 @@ fn suppressing_any_step_never_retargets_a_later_one() {
     }
     assert!(failed > 0, "dropping steps makes the steps that depended on them fail visibly");
 }
+
+#[test]
+fn a_saved_timeline_replays_in_another_session() {
+    let s = recorded();
+    let doc = (*s.active().unwrap().doc).clone();
+    let bytes = photocraft_format::save_to_bytes(&doc, &photocraft_format::SaveOptions::default()).unwrap();
+    let mut r = Session::new();
+    r.add_document(photocraft_format::load_from_bytes(&bytes).unwrap(), None);
+    let content = |s: &Session| photocraft_doc::Document { design_timeline: None, ..(*s.active().unwrap().doc).clone() };
+    let before = content(&r);
+    r.execute("design.replay", json!({})).unwrap();
+    assert_eq!(content(&r), before, "the saved steps rebuild the saved document");
+    // Recording right after the load: no other command has moved the step clock yet.
+    let mut r = Session::new();
+    r.add_document(photocraft_format::load_from_bytes(&bytes).unwrap(), None);
+    r.execute("layer.new.layer", json!({"name": "after reload"})).unwrap();
+    let tl = r.active().unwrap().doc.design_timeline.clone().unwrap();
+    assert_eq!(tl.steps.last().unwrap().command, "layer.new.layer", "recording continues after a reload");
+    let ids: Vec<u64> = tl.steps.iter().map(|st| st.step).collect();
+    assert!(ids.windows(2).all(|w| w[0] < w[1]), "new steps get ids past the saved ones: {ids:?}");
+}

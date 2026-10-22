@@ -136,9 +136,11 @@ pub fn reserve_unscoped_id(id: u64) -> bool {
     true
 }
 
-/// The first step id after every step that minted a layer or smart-contents id in `doc`.
+/// The first step id after every step that minted a layer or smart-contents id in `doc`, and
+/// every step of its design timeline (which may have minted none).
 pub fn next_step_after(doc: &Document) -> u64 {
-    doc.walk()
+    let minted = doc
+        .walk()
         .into_iter()
         .flat_map(|(_, _, l)| {
             let contents = if let LayerContent::Smart(sm) = &l.content { Some(sm.contents_id.0) } else { None };
@@ -146,8 +148,9 @@ pub fn next_step_after(doc: &Document) -> u64 {
         })
         .flatten()
         .filter_map(id_step)
-        .max()
-        .map_or(0, |s| s + 1)
+        .max();
+    let steps = doc.design_timeline.as_ref().and_then(|t| t.steps.iter().map(|st| st.step.min(MAX_STEP)).max());
+    minted.max(steps).map_or(0, |s| s + 1)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]

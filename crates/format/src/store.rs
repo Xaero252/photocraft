@@ -161,8 +161,22 @@ pub(crate) fn read_manifest(src: &dyn ByteSource, opts: &LoadOptions) -> Result<
     de.end()?;
     crate::migrate::migrate(&mut v)?;
     let layers = take_array(&mut v, "/document/layers");
+    // A design timeline's base and baked layers are layer trees too: decode them the same way.
+    let base_layers = take_array(&mut v, "/document/design_timeline/base/layers");
+    let baked_layers: Vec<Vec<serde_json::Value>> = match v.pointer_mut("/document/design_timeline/steps") {
+        Some(serde_json::Value::Array(steps)) => steps.iter_mut().map(|st| take_array(st, "/baked/layers")).collect(),
+        _ => Vec::new(),
+    };
     let mut m: Manifest = serde_json::from_value(v)?;
     m.document.layers = layers_from_json(layers)?;
+    if let Some(t) = m.document.design_timeline.as_deref_mut() {
+        t.base.layers = layers_from_json(base_layers)?;
+        for (st, layers) in t.steps.iter_mut().zip(baked_layers) {
+            if let Some(b) = st.baked.as_mut() {
+                b.layers = layers_from_json(layers)?;
+            }
+        }
+    }
     // A number past f32's range decodes as infinity, which no save could write back (#6862).
     if let Err(crate::finite::Problem::NonFinite { path }) = crate::finite::check(&m) {
         return Err(FormatError::corrupt(format!("`{path}` is out of range")));
@@ -777,7 +791,7 @@ impl PcraftWriter {
             previews.push((COMPOSITE, png(t)?));
         }
         let manifest = Manifest {
-            format_version: FORMAT_VERSION,
+            format_version: if document.design_timeline.is_some() { FORMAT_VERSION } else { crate::manifest::BASE_FORMAT_VERSION },
             generator: format!("photocraft-format {}", env!("CARGO_PKG_VERSION")),
             document,
             thumbnail: opts.thumbnail.as_ref().map(|_| THUMB.to_owned()),

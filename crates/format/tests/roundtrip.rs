@@ -169,6 +169,26 @@ fn deeply_nested_groups_roundtrip() {
     std::thread::Builder::new().stack_size(1 << 20).spawn(run).unwrap().join().unwrap();
 }
 
+/// A design timeline's base and baked layers load as deep a group tree as the document's own,
+/// on the same small stack.
+#[test]
+fn deeply_nested_groups_in_a_design_timeline_roundtrip() {
+    let run = || {
+        let base = nested_doc(MAX_GROUP_DEPTH, SampleType::U8);
+        let mut doc = base.clone();
+        let mut step: photocraft_doc::design::DesignStep =
+            serde_json::from_value(serde_json::json!({"step": 1, "command": "c", "params": {}, "label": "c", "active": null, "selected": [], "created": [], "changed": []})).unwrap();
+        let top = base.layers[0].id;
+        step.changed = vec![top];
+        step.baked = Some(std::sync::Arc::new(photocraft_doc::design::Baked { layers: base.layers.clone(), placed: Vec::new(), selection: None }));
+        doc.design_timeline =
+            Some(std::sync::Arc::new(photocraft_doc::design::DesignTimeline { base: std::sync::Arc::new(base), steps: vec![step], marker: None }));
+        let back = load_from_bytes(&save_to_bytes(&doc, &SaveOptions::default()).unwrap()).unwrap();
+        assert_eq!(back, doc);
+    };
+    std::thread::Builder::new().stack_size(1 << 20).spawn(run).unwrap().join().unwrap();
+}
+
 /// A save never writes a bundle the loader would reject for its nesting.
 #[test]
 fn nesting_beyond_the_load_limit_is_refused_at_save() {
@@ -456,7 +476,7 @@ fn previews_embedded_and_readable() {
     assert_eq!(img.to_rgba8(), thumb.pixels);
     let m = read_manifest(&bytes).unwrap();
     assert_eq!(m.composite.as_deref(), Some("composite/preview.png"));
-    assert_eq!(m.format_version, FORMAT_VERSION);
+    assert_eq!(m.format_version, FORMAT_VERSION, "read manifests are migrated to the current version");
     assert!(read_thumbnail(&save_to_bytes(&doc, &SaveOptions::default()).unwrap()).unwrap().is_none());
 }
 

@@ -42,7 +42,7 @@ pub use atomic::{atomic_write, atomic_write_progress};
 pub use autosave::RecoveryStore;
 pub use autosave::{Autosaver, RecoveryEntry, discard_recovery, list_recovery, recover};
 pub use convert::MAX_GROUP_DEPTH;
-pub use manifest::{FORMAT_VERSION, Manifest};
+pub use manifest::{BASE_FORMAT_VERSION, FORMAT_VERSION, Manifest};
 pub use read::read_file;
 pub use store::{ByteSource, DEFAULT_REVERIFY_BUDGET, PcraftWriter, SaveStats, read_entry};
 

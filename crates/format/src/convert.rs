@@ -264,7 +264,25 @@ pub(crate) fn doc_m(d: &Document, sink: &mut dyn Sink) -> DocM {
         notes: d.notes.clone(),
         text_styles: d.text_styles.clone(),
         slices: d.slices.clone(),
+        design_timeline: d.design_timeline.as_ref().map(|t| Box::new(design_timeline_m(t, sink))),
     }
+}
+
+fn design_timeline_m(t: &photocraft_doc::design::DesignTimeline, sink: &mut dyn Sink) -> DesignTimelineM {
+    let steps = t
+        .steps
+        .iter()
+        .map(|st| DesignStepM {
+            step: st.clone(),
+            baked: st.baked.as_ref().map(|b| BakedM {
+                layers: b.layers.iter().map(|l| layer_m(l, sink)).collect(),
+                placed: b.placed.iter().map(|(id, below, above)| (id.0, below.map(|l| l.0), above.map(|l| l.0))).collect(),
+                selection_changed: b.selection.is_some(),
+                selection: b.selection.as_ref().and_then(|s| s.as_ref().map(|s| surface_m(s, sink))),
+            }),
+        })
+        .collect();
+    DesignTimelineM { base: doc_m(&t.base, sink), steps, marker: t.marker }
 }
 
 fn effects_m(e: &Effects, sink: &mut dyn Sink) -> EffectsM {
@@ -551,6 +569,41 @@ impl Loader<'_> {
     }
 
     pub(crate) fn document(&mut self, m: &DocM) -> Result<Document> {
+        let mut doc = self.document_only(m)?;
+        // ponytail: remapped ids no longer name the steps' layers, so the timeline is dropped; remap its ids too if that turns up.
+        if let Some(t) = m.design_timeline.as_deref().filter(|_| self.preserve_ids) {
+            doc.design_timeline = Some(Arc::new(self.design_timeline(t, &doc)?));
+        }
+        Ok(doc)
+    }
+
+    fn design_timeline(&mut self, t: &DesignTimelineM, doc: &Document) -> Result<photocraft_doc::design::DesignTimeline> {
+        use photocraft_doc::design::{Baked, Checkpoint, DesignTimeline};
+        let mut base = self.document_only(&t.base)?;
+        base.id = doc.id;
+        let mut steps = Vec::with_capacity(t.steps.len());
+        for m in &t.steps {
+            let mut st = m.step.clone();
+            st.baked = match &m.baked {
+                Some(b) => Some(Arc::new(Baked {
+                    layers: b.layers.iter().map(|l| self.layer(l, 0)).collect::<Result<Vec<_>>>()?,
+                    placed: b.placed.iter().map(|(id, below, above)| (LayerId(*id), below.map(LayerId), above.map(LayerId))).collect(),
+                    selection: if b.selection_changed { Some(self.opt_surface(&b.selection)?) } else { None },
+                })),
+                None => None,
+            };
+            steps.push(st);
+        }
+        let mut tl = DesignTimeline { base: Arc::new(base), steps, marker: t.marker };
+        // The saved document is what the steps in effect produce: replay can resume from it.
+        let n = tl.in_effect();
+        if let Some(last) = n.checked_sub(1).and_then(|i| tl.steps.get_mut(i)) {
+            last.checkpoint = Checkpoint(Some(Arc::new(doc.clone())));
+        }
+        Ok(tl)
+    }
+
+    fn document_only(&mut self, m: &DocM) -> Result<Document> {
         // Keep stored ids, reserving unscoped ones, unless one is implausibly large (keyed to a
         // step near the limit, or far ahead of the unscoped counter); then remap the whole
         // document while retaining shared contents groups.
