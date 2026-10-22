@@ -830,6 +830,13 @@ impl PcraftWriter {
         self.hash_cache.retain(|_, (w, _)| w.strong_count() > 0);
         self.blob_hash_cache.retain(|_, (w, _)| w.strong_count() > 0);
         convert::check_nesting(&doc.layers)?;
+        // The timeline's base and baked layer trees are saved too, and loaded under the same limit.
+        if let Some(t) = &doc.design_timeline {
+            convert::check_nesting(&t.base.layers)?;
+            for b in t.steps.iter().filter_map(|st| st.baked.as_deref()) {
+                convert::check_nesting(&b.layers)?;
+            }
+        }
         let mut c = Collect { hash_cache: Some(&mut self.hash_cache), blob_hash_cache: Some(&mut self.blob_hash_cache), ..Default::default() };
         let document = convert::doc_m(doc, &mut c);
         let mut previews = Vec::new();

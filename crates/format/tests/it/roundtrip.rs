@@ -196,6 +196,23 @@ fn deeply_nested_groups_in_a_design_timeline_roundtrip() {
 fn nesting_beyond_the_load_limit_is_refused_at_save() {
     let e = save_to_bytes(&nested_doc(MAX_GROUP_DEPTH + 1, SampleType::U8), &SaveOptions::default()).unwrap_err();
     assert!(matches!(e, FormatError::LimitExceeded(_)), "{e}");
+    // Also in a design timeline's base or a baked step, which load under the same limit.
+    let deep = nested_doc(MAX_GROUP_DEPTH + 1, SampleType::U8);
+    let mut step: photocraft_doc::design::DesignStep = serde_json::from_value(
+        serde_json::json!({"step": 1, "command": "c", "params": {}, "label": "c", "active": null, "selected": [], "created": [], "changed": []}),
+    )
+    .unwrap();
+    let shallow = Document::new("d", photocraft_doc::Size::new(1, 1), ColorMode::Rgb, SampleType::U8);
+    for in_base in [true, false] {
+        let mut doc = shallow.clone();
+        let base = if in_base { deep.clone() } else { shallow.clone() };
+        step.baked =
+            (!in_base).then(|| std::sync::Arc::new(photocraft_doc::design::Baked { layers: deep.layers.clone(), placed: Vec::new(), selection: None }));
+        doc.design_timeline =
+            Some(std::sync::Arc::new(photocraft_doc::design::DesignTimeline { base: std::sync::Arc::new(base), steps: vec![step.clone()], marker: None }));
+        let e = save_to_bytes(&doc, &SaveOptions::default()).unwrap_err();
+        assert!(matches!(e, FormatError::LimitExceeded(_)), "in base {in_base}: {e}");
+    }
 }
 
 #[test]
