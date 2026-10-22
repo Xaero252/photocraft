@@ -663,6 +663,7 @@ impl Loader<'_> {
             duotone: m.duotone.clone(),
             variables,
             timeline: m.timeline.clone(),
+            design_timeline: None,
             file_encoding: m.file_encoding,
             layer_comps,
             last_applied_comp: m.last_applied_comp,

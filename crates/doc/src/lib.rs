@@ -13,6 +13,7 @@ pub mod advanced;
 pub mod analysis;
 pub mod blend_if;
 pub mod comps;
+pub mod design;
 pub mod effects;
 pub mod mode;
 pub mod pattern;
@@ -1006,6 +1007,8 @@ pub struct Document {
     pub variables: Variables,
     /// Window › Timeline (None until a video timeline is created).
     pub timeline: Option<Timeline>,
+    /// The design timeline (None until it is turned on).
+    pub design_timeline: Option<Arc<design::DesignTimeline>>,
     /// How the document's lossy file was encoded (its JPEG quality, WebP lossy or lossless,
     /// PNG stereo pairing), so a save writes it back the same way rather than at fixed defaults.
     pub file_encoding: FileEncoding,
@@ -1075,6 +1078,7 @@ impl Document {
             slices: Slices::default(),
             variables: Variables::default(),
             timeline: None,
+            design_timeline: None,
             file_encoding: FileEncoding::default(),
         }
     }

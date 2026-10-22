@@ -715,6 +715,7 @@ fn doc_pixels_equal(a: &Document, b: &Document) -> bool {
         slices: _,
         variables: _,
         timeline: _,
+        design_timeline: _,
         file_encoding: _,
     } = a;
     *size == b.size
@@ -817,6 +818,8 @@ pub fn selection_only_change(a: &Document, b: &Document) -> bool {
         slices,
         variables,
         timeline,
+        // A recorded selection step grows the design timeline; that alone isn't a modification.
+        design_timeline: _,
         file_encoding,
     } = a;
     // The ignored fields above are the pixel ones `pixels_equal_with` already compares.

@@ -228,6 +228,8 @@ struct Running {
     layers: Option<LayerSelection>,
     rx: std::sync::mpsc::Receiver<Result<Payload>>,
     apply: Option<Apply>,
+    /// Design timelines to record the step into once applied: (documents before, step, params).
+    timeline: Option<(Vec<crate::timeline::Before>, u64, Value)>,
     #[cfg(not(target_arch = "wasm32"))]
     handle: Option<std::thread::JoinHandle<()>>,
 }
@@ -418,6 +420,7 @@ pub fn run<T: Send + 'static>(
         layers,
         rx,
         apply: Some(erased),
+        timeline: None,
         #[cfg(not(target_arch = "wasm32"))]
         handle,
     });
@@ -737,10 +740,21 @@ impl Session {
             return self.dispatch_scoped(id, params, background);
         }
         let scope = photocraft_doc::IdScope::new(self.next_step);
+        let before = crate::timeline::capture(self);
+        let recorded = (!before.is_empty()).then(|| params.clone());
         let r = {
             let _g = scope.enter();
             self.dispatch_scoped(id, params, background)
         };
+        match (&r, recorded) {
+            (Ok(Started::Done(_)), Some(p)) => crate::timeline::record(self, before, scope.step(), id, &p),
+            (Ok(Started::Job(j)), Some(p)) => {
+                if let Some(job) = self.jobs.running.iter_mut().find(|job| job.id == *j) {
+                    job.timeline = Some((before, scope.step(), p));
+                }
+            }
+            _ => {}
+        }
         // A started job may still mint ids under this step, so it is spent too.
         if scope.used() || matches!(r, Ok(Started::Job(_))) {
             self.next_step = self.next_step.max(scope.step() + 1);
@@ -921,6 +935,7 @@ impl Session {
     /// Apply (or report the failure of) a job whose worker has delivered `r`.
     fn finish_job(&mut self, mut job: Running, r: Result<Payload>) {
         let apply = job.apply.take();
+        let timeline = job.timeline.take();
         let outcome = match r {
             Err(EngineError::Cancelled) => JobOutcome::Cancelled,
             Err(e) => JobOutcome::Failed(e.to_string()),
@@ -931,6 +946,9 @@ impl Session {
                 Err(e) => JobOutcome::Failed(e.to_string()),
             },
         };
+        if let (JobOutcome::Done(_), Some((before, step, params))) = (&outcome, timeline) {
+            crate::timeline::record(self, before, step, &job.command, &params);
+        }
         self.end_job(&job, outcome);
     }
 

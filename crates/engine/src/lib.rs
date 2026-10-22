@@ -32,6 +32,7 @@ pub mod commands;
 pub mod comps_cmds;
 mod crop_fill;
 pub mod cutout_cmds;
+pub mod design_cmds;
 pub mod display_color;
 pub mod distort_cmds;
 pub mod doc_path;
@@ -117,6 +118,7 @@ pub mod solid_fill_cmds;
 pub mod stamp_cmds;
 pub mod swatch_cmds;
 pub mod symmetry_cmds;
+mod timeline;
 mod timeline_cmds;
 pub mod transform_cmds;
 mod trap_cmds;
@@ -545,6 +547,8 @@ pub struct Session {
     /// The step id the next command mints layer and smart-contents ids under. Session-wide, so
     /// a layer copied into another document never collides with that document's ids.
     pub(crate) next_step: u64,
+    /// Tool-state commands since the last design-timeline step, replayed ahead of the next one.
+    pub(crate) timeline_prelude: Vec<photocraft_doc::design::Prelude>,
 }
 
 /// Move item `i` of `v` to position `to`, clamped to the end. Returns where it went; `None` when
