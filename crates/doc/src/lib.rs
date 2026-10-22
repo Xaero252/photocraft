@@ -77,7 +77,7 @@ pub struct IdScope {
 
 impl IdScope {
     pub fn new(step: u64) -> Self {
-        IdScope { step: step.min(MAX_STEP), next: Arc::new(AtomicU64::new(1)) }
+        IdScope { step, next: Arc::new(AtomicU64::new(1)) }
     }
 
     /// The scope installed on this thread, if any.
@@ -101,8 +101,9 @@ impl IdScope {
 
     fn mint(&self) -> Option<u64> {
         let n = self.next.fetch_add(1, Ordering::Relaxed);
-        // ponytail: past 16M ids in one step, ids fall back to the unscoped counter (unique, not replay-stable).
-        (n <= COUNTER_MASK).then_some((self.step << STEP_SHIFT) | n)
+        // ponytail: past 16M ids in one step, or a step past MAX_STEP, ids fall back to the unscoped
+        // counter (unique, not replay-stable).
+        (self.step <= MAX_STEP && n <= COUNTER_MASK).then_some((self.step << STEP_SHIFT) | n)
     }
 }
 
@@ -151,8 +152,8 @@ pub fn next_step_after(doc: &Document) -> u64 {
         .flatten()
         .filter_map(id_step)
         .max();
-    let steps = doc.design_timeline.as_ref().and_then(|t| t.steps.iter().map(|st| st.step.min(MAX_STEP)).max());
-    minted.max(steps).map_or(0, |s| s + 1)
+    let steps = doc.design_timeline.as_ref().and_then(|t| t.steps.iter().map(|st| st.step).max());
+    minted.max(steps).map_or(0, |s| s.saturating_add(1))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -1667,5 +1668,23 @@ mod id_tests {
             d
         };
         assert_eq!(super::next_step_after(&doc), 10);
+    }
+
+    #[test]
+    fn a_step_past_max_step_never_reissues_an_id() {
+        let at_max = {
+            let _g = IdScope::new(super::MAX_STEP).enter();
+            LayerId::fresh()
+        };
+        let mut doc = super::Document::new("d", super::Size::new(1, 1), super::ColorMode::Rgb, super::SampleType::U8);
+        let mut l = super::Layer::raster("l", super::PixelFormat::RGBA8);
+        l.id = at_max;
+        doc.layers.push(l);
+        let next = super::next_step_after(&doc);
+        assert_eq!(next, super::MAX_STEP + 1);
+        let _g = IdScope::new(next).enter();
+        let fresh = LayerId::fresh();
+        assert_ne!(fresh, at_max);
+        assert_eq!(super::id_step(fresh.0), None, "past MAX_STEP ids come from the unscoped counter");
     }
 }

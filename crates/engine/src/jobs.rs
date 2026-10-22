@@ -779,7 +779,7 @@ impl Session {
         // A started job may still mint ids under this step, and a design-timeline step is named
         // by it, so either spends it too.
         if scope.used() || timed || matches!(r, Ok(Started::Job(_))) {
-            self.next_step = self.next_step.max(scope.step() + 1);
+            self.next_step = self.next_step.max(scope.step().saturating_add(1));
         }
         r
     }
