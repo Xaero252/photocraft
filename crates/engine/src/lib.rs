@@ -542,6 +542,9 @@ pub struct Session {
     /// document, source read-only)`. The shell takes them with [`Session::take_held_open`].
     held_opens: Vec<(u64, Document, bool)>,
     next_held_open: u64,
+    /// The step id the next command mints layer and smart-contents ids under. Session-wide, so
+    /// a layer copied into another document never collides with that document's ids.
+    pub(crate) next_step: u64,
 }
 
 /// Move item `i` of `v` to position `to`, clamped to the end. Returns where it went; `None` when
@@ -626,6 +629,7 @@ impl Session {
         while self.docs.iter().any(|st| st.doc.id == doc.id) {
             doc.id = photocraft_doc::DocId::fresh();
         }
+        self.next_step = self.next_step.max(photocraft_doc::next_step_after(&doc));
         let mut st = DocState::new(doc, path);
         st.history.max_states = self.prefs.get().performance.history_states.max(1) as usize;
         st.history.max_bytes = self.prefs.get().performance.history_budget_bytes();

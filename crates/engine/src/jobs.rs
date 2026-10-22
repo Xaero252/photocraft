@@ -369,9 +369,12 @@ pub fn run<T: Send + 'static>(
     let ctx = JobCtx::new();
     let (tx, rx) = std::sync::mpsc::channel::<Result<Payload>>();
     let apply_document = document.clone();
+    let id_scope = photocraft_doc::IdScope::current();
+    let apply_scope = id_scope.clone();
     let erased: Apply = Box::new(move |s, any| {
         let _authorization = AuthorizationScope::enter(authorization);
         let _document = crate::doc_path::scope(apply_document.as_deref());
+        let _id_scope = apply_scope.as_ref().map(photocraft_doc::IdScope::enter);
         let t = any.downcast::<T>().map_err(|_| EngineError::Other("internal error: job result type mismatch".into()))?;
         apply(s, *t)
     });
@@ -386,6 +389,7 @@ pub fn run<T: Send + 'static>(
         let spawned = std::thread::Builder::new().name(format!("photocraft-job-{}", id.0)).spawn(move || {
             let _authorization = AuthorizationScope::enter(authorization);
             let _document = crate::doc_path::scope(document.as_deref());
+            let _id_scope = id_scope.as_ref().map(photocraft_doc::IdScope::enter);
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(&wctx).map(|t| Box::new(t) as Payload)))
                 .unwrap_or_else(|_| Err(EngineError::Other(format!("`{label_w}` failed with an internal error (logged); the document is unchanged"))));
             // The receiver is gone when the job was cancelled: nothing to report.
@@ -396,7 +400,7 @@ pub fn run<T: Send + 'static>(
     #[cfg(target_arch = "wasm32")]
     {
         // Unreachable (wasm runs inline above); keep the types used.
-        drop((work, tx));
+        drop((work, tx, id_scope));
     }
     s.jobs.pending = Some(Running {
         id,
@@ -727,7 +731,24 @@ impl Session {
     }
 
     /// Run the command `id`: inline, or (with `background`) as a job when it is one.
+    /// Ids a command mints are keyed to its step; a command run on another's behalf shares it.
     pub(crate) fn dispatch(&mut self, id: &str, params: Value, background: bool) -> Result<Started> {
+        if photocraft_doc::IdScope::current().is_some() {
+            return self.dispatch_scoped(id, params, background);
+        }
+        let scope = photocraft_doc::IdScope::new(self.next_step);
+        let r = {
+            let _g = scope.enter();
+            self.dispatch_scoped(id, params, background)
+        };
+        // A started job may still mint ids under this step, so it is spent too.
+        if scope.used() || matches!(r, Ok(Started::Job(_))) {
+            self.next_step = self.next_step.max(scope.step() + 1);
+        }
+        r
+    }
+
+    fn dispatch_scoped(&mut self, id: &str, params: Value, background: bool) -> Result<Started> {
         let spec = crate::commands::find(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
         // Params are named fields: anything but an object (or null, meaning none) is a caller
         // mistake, not "use every default".

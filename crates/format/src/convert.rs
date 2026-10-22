@@ -551,26 +551,33 @@ impl Loader<'_> {
     }
 
     pub(crate) fn document(&mut self, m: &DocM) -> Result<Document> {
-        // Reserve every stored id before allocating identities missing from older bundles. If an
-        // id is implausibly large, remap the whole document while retaining shared contents groups.
+        // Keep stored ids, reserving unscoped ones, unless one is implausibly large (keyed to a
+        // step near the limit, or far ahead of the unscoped counter); then remap the whole
+        // document while retaining shared contents groups.
         if self.preserve_ids {
-            fn max_ids(layers: &[LayerM], depth: usize, max: &mut u64) -> Result<()> {
+            // [largest scoped id, largest unscoped id]
+            fn max_ids(layers: &[LayerM], depth: usize, max: &mut [u64; 2]) -> Result<()> {
+                fn note(max: &mut [u64; 2], id: u64) {
+                    let m = &mut max[usize::from(photocraft_doc::id_step(id).is_none())];
+                    *m = (*m).max(id);
+                }
                 if depth > MAX_GROUP_DEPTH && !layers.is_empty() {
                     return Err(too_deep());
                 }
                 for l in layers {
-                    *max = (*max).max(l.id);
+                    note(max, l.id);
                     match &l.content {
                         ContentM::Group { children, .. } => max_ids(children, depth + 1, max)?,
-                        ContentM::Smart { contents_id: Some(id), .. } => *max = (*max).max(*id),
+                        ContentM::Smart { contents_id: Some(id), .. } => note(max, *id),
                         _ => {}
                     }
                 }
                 Ok(())
             }
-            let mut max = m.id;
+            let mut max = [0; 2];
             max_ids(&m.layers, 0, &mut max)?;
-            self.preserve_ids = reserve_ids_through(max);
+            self.preserve_ids =
+                photocraft_doc::id_step(max[0]).is_some_and(|s| s < photocraft_doc::MAX_STEP / 2) && photocraft_doc::reserve_unscoped_id(max[1]);
         }
         let layers = m.layers.iter().map(|l| self.layer(l, 0)).collect::<Result<Vec<_>>>()?;
         let mut channels = Vec::with_capacity(m.channels.len());
@@ -630,7 +637,7 @@ impl Loader<'_> {
                 vd.layer = self.id_map.get(&vd.layer.0).copied().unwrap_or(LayerId(u64::MAX - vd.layer.0.min(u64::MAX / 2)));
             }
         }
-        let id = if self.preserve_ids { DocId(m.id) } else { DocId::fresh() };
+        let id = if self.preserve_ids && reserve_doc_ids_through(m.id) { DocId(m.id) } else { DocId::fresh() };
         Ok(Document {
             id,
             name: m.name.clone(),
@@ -672,18 +679,18 @@ impl Loader<'_> {
     }
 }
 
-/// Advance the global id counter past `max` so ids loaded from a file never
-/// collide with ids minted later in this process. Returns `false` if `max`
-/// is implausibly far ahead (the caller then remaps ids instead).
-pub(crate) fn reserve_ids_through(max: u64) -> bool {
-    let probe = LayerId::fresh().0;
+/// Advance the document id counter past `max` so a loaded document id never
+/// collides with ids minted later in this process. Returns `false` if `max`
+/// is implausibly far ahead (the caller then mints a fresh id instead).
+pub(crate) fn reserve_doc_ids_through(max: u64) -> bool {
+    let probe = DocId::fresh().0;
     if max < probe {
         return true;
     }
     if max - probe > 10_000_000 {
         return false;
     }
-    photocraft_doc::ensure_ids_above(max);
+    photocraft_doc::ensure_doc_ids_above(max);
     true
 }
 
