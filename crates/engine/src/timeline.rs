@@ -137,9 +137,9 @@ fn resolve_names(doc: &Document, params: &Value) -> Value {
     let mut p = params.clone();
     if let Some(slot) = p.get_mut("layer")
         && let Some(name) = slot.as_str()
-        && let Some((_, _, l)) = doc.walk().into_iter().find(|(_, _, l)| l.name == name)
+        && let Some(id) = crate::commands::layer_named(doc, name)
     {
-        *slot = Value::from(l.id.0);
+        *slot = Value::from(id.0);
     }
     p
 }

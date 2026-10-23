@@ -401,3 +401,28 @@ fn a_checkpoint_holds_no_timeline_of_its_own() {
     assert!(tl.steps.iter().filter_map(|st| st.checkpoint.0.as_ref()).all(|d| d.design_timeline.is_none()));
     assert!(tl.steps.iter().any(|st| st.checkpoint.0.is_some()));
 }
+
+#[test]
+fn a_timeline_rewrite_that_leaves_the_layers_alone_still_modifies_the_document() {
+    let mut s = started();
+    s.execute("select.rect", json!({"x": 1, "y": 1, "width": 4, "height": 4})).unwrap();
+    // Saved under its own name, so the save itself changes nothing the timeline would refuse.
+    let name = s.active().unwrap().doc.name.clone();
+    s.active_mut().unwrap().saved_to(name);
+    assert!(!s.active().unwrap().is_dirty());
+    let sel = step_id(&mut s, 0);
+    s.execute("design.suppress", json!({"step": sel})).unwrap();
+    assert!(s.active().unwrap().is_dirty(), "the saved file still has the step unsuppressed");
+}
+
+#[test]
+fn a_step_naming_a_shared_layer_name_replays_on_the_layer_it_acted_on() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "X"})).unwrap();
+    s.execute("layer.new.layer", json!({"name": "X"})).unwrap();
+    s.execute("layer.setProps", json!({"layer": "X", "opacity": 0.5})).unwrap();
+    let before = doc(&s);
+    s.execute("design.replay", json!({})).unwrap();
+    assert!(steps(&mut s).iter().all(|x| x["state"]["state"] == "ok"), "{:?}", steps(&mut s));
+    assert_eq!(doc(&s), before);
+}

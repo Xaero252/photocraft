@@ -834,8 +834,9 @@ pub fn selection_only_change(a: &Document, b: &Document) -> bool {
         slices,
         variables,
         timeline,
-        // A recorded selection step grows the design timeline; that alone isn't a modification,
-        // but starting or stopping it is (it changes what a save writes).
+        // Compared by identity: a recorded selection step grows the timeline after this check
+        // (timeline::record), so it stays clean, while design.* commands that rewrite it or
+        // start or stop it change what a save writes.
         design_timeline,
         file_encoding,
     } = a;
@@ -860,7 +861,10 @@ pub fn selection_only_change(a: &Document, b: &Document) -> bool {
         && *slices == b.slices
         && *variables == b.variables
         && *timeline == b.timeline
-        && design_timeline.is_some() == b.design_timeline.is_some()
+        && match (design_timeline, &b.design_timeline) {
+            (Some(x), Some(y)) => std::sync::Arc::ptr_eq(x, y),
+            (x, y) => x.is_none() && y.is_none(),
+        }
         && *file_encoding == b.file_encoding
 }
 
