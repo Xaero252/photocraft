@@ -5,6 +5,7 @@ use photocraft_doc::design::{StepState, layer_changes};
 use photocraft_engine::Session;
 use serde_json::{Value, json};
 
+/// Steps that lean on implicit state: the active layer, the selection, colours and tool settings.
 fn harsh_script() -> Vec<(&'static str, Value)> {
     let stroke = |pts: Value, color: &str| json!({"points": pts, "size": 6, "hardness": 1.0, "color": color});
     vec![
@@ -34,6 +35,7 @@ fn harsh_script() -> Vec<(&'static str, Value)> {
     ]
 }
 
+/// A session that recorded the harsh script with the timeline on.
 fn recorded() -> Session {
     let mut s = Session::new();
     s.execute("file.new", json!({"width": 64, "height": 48})).unwrap();

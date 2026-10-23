@@ -1062,6 +1062,7 @@ impl FileEncoding {
 pub type LayerPath = Vec<usize>;
 
 impl Document {
+    /// An empty document: no layers, a fresh id, 72 ppi.
     pub fn new(name: impl Into<String>, size: Size, mode: ColorMode, depth: SampleType) -> Self {
         Document {
             id: DocId::fresh(),

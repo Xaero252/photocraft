@@ -681,6 +681,7 @@ fn open_path(app: &mut PhotocraftApp, path: &str) -> Result<Value, String> {
     app.open_path(path).map(|w| json!({"warnings": w}))
 }
 
+/// Whether menu item `id` can run now.
 pub fn is_enabled(app: &PhotocraftApp, id: &str) -> bool {
     if crate::tool_shortcuts::tool(id).is_some() {
         return true;

@@ -2,14 +2,17 @@ use serde_json::{Value, json};
 
 use crate::Session;
 
+/// The timeline's steps as `design.list` reports them.
 pub(super) fn steps(s: &mut Session) -> Vec<Value> {
     s.execute("design.list", json!({})).unwrap()["steps"].as_array().unwrap().clone()
 }
 
+/// The command id of every recorded step.
 pub(super) fn commands(s: &mut Session) -> Vec<String> {
     steps(s).iter().map(|st| st["command"].as_str().unwrap().to_string()).collect()
 }
 
+/// A 16×16 document with the timeline on.
 fn started() -> Session {
     let mut s = Session::new();
     s.execute("file.new", json!({"width": 16, "height": 16})).unwrap();
@@ -93,14 +96,17 @@ fn a_layer_named_in_params_is_recorded_by_id() {
     assert_eq!(steps(&mut s).last().unwrap()["params"]["layer"], json!(a.0));
 }
 
+/// Step `i`'s outcome (`ok`, `stale`, …).
 fn state(s: &mut Session, i: usize) -> String {
     steps(s)[i]["state"]["state"].as_str().unwrap().to_string()
 }
 
+/// Step `i`'s id.
 fn step_id(s: &mut Session, i: usize) -> u64 {
     steps(s)[i]["step"].as_u64().unwrap()
 }
 
+/// The active document without its timeline, to compare content.
 fn doc(s: &Session) -> photocraft_doc::Document {
     let mut d = (*s.active().unwrap().doc).clone();
     d.design_timeline = None;
@@ -493,11 +499,13 @@ fn a_file_placed_from_a_picker_is_a_baked_step() {
     assert_eq!(state(&mut s, 2), "ok", "a placed file doesn't depend on earlier steps");
 }
 
+/// The layer named "A".
 fn layer_a(s: &Session) -> photocraft_doc::Layer {
     let doc = &s.active().unwrap().doc;
     doc.layer(crate::commands::layer_named(doc, "A").unwrap()).unwrap().clone()
 }
 
+/// A timeline of three steps: a new layer "A", then its opacity, then hiding it.
 fn three_steps() -> Session {
     let mut s = started();
     s.execute("layer.new.layer", json!({"name": "A"})).unwrap();

@@ -13,6 +13,7 @@ fn stored_version(bytes: &[u8]) -> u64 {
     serde_json::from_slice::<serde_json::Value>(&raw).unwrap()["format_version"].as_u64().unwrap()
 }
 
+/// A plain recorded step.
 fn step(step: u64, command: &str) -> DesignStep {
     DesignStep {
         step,
@@ -33,6 +34,7 @@ fn step(step: u64, command: &str) -> DesignStep {
     }
 }
 
+/// A document with a timeline holding a base, steps, a baked result and a marker.
 fn with_timeline() -> Document {
     let _scope = IdScope::new(1).enter();
     let mut base = Document::new("d", Size::new(8, 8), ColorMode::Rgb, SampleType::U8);

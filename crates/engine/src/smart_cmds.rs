@@ -1000,6 +1000,7 @@ fn export_contents(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"path": path, "fileName": name, "bytes": r.bytes.len(), "converted": true, "warnings": r.warnings}))
 }
 
+/// Open a smart object's contents as a document of their own, linked back to the layer.
 fn edit_contents(s: &mut Session, p: &Value) -> Result<Value> {
     let id = layer_param(s, p)?;
     let st = s.active().ok_or(EngineError::NoDocument)?;

@@ -3599,6 +3599,7 @@ fn channels(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     crate::channels_panel::show(app, ui);
 }
 
+/// The History panel: snapshots and undo states.
 fn history(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(st) = app.session.active() else {

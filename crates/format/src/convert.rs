@@ -247,6 +247,7 @@ fn channel_m(c: &AlphaChannel, sink: &mut dyn Sink) -> ChannelM {
     ChannelM { name: name.clone(), surface: surface_m(surface, sink), spot: *spot, color: *color, opacity: *opacity, indicates: *indicates }
 }
 
+/// The manifest form of `d`, its design timeline included; tiles and blobs go to `sink`.
 pub(crate) fn doc_m(d: &Document, sink: &mut dyn Sink) -> DocM {
     DocM {
         id: d.id.0,

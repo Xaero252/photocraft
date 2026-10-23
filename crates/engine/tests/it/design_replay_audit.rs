@@ -34,6 +34,7 @@ fn fixture(kind: usize) -> Session {
 
 const FIXTURES: usize = 5;
 
+/// The active document without its timeline, to compare content.
 fn content(s: &Session) -> photocraft_doc::Document {
     let mut d = (*s.active().unwrap().doc).clone();
     d.design_timeline = None;
@@ -50,6 +51,7 @@ enum Outcome {
     Differs(String),
 }
 
+/// Run command `id` on fixture `kind`, replay the timeline and compare the results.
 fn audit(id: &'static str, kind: usize, p: Value) -> Outcome {
     let mut s = fixture(kind);
     let n = |s: &mut Session| s.execute("design.list", json!({})).map(|v| v["steps"].as_array().map_or(0, Vec::len)).unwrap_or(0);

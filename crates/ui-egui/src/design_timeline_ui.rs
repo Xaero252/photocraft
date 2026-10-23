@@ -384,6 +384,7 @@ mod tests {
     use super::*;
     use egui_kittest::{Harness, kittest::Queryable};
 
+    /// An app with a 64×48 document and the panel open.
     fn app() -> PhotocraftApp {
         let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({"width": 64, "height": 48})).unwrap();
@@ -391,6 +392,7 @@ mod tests {
         app
     }
 
+    /// A harness drawing the strip, with the app's fonts in place.
     fn harness(mut app: PhotocraftApp) -> Harness<'static, PhotocraftApp> {
         // The app's own font families apply from the next frame: show the strip once they're in.
         app.ui.design_timeline.open = false;
@@ -402,6 +404,7 @@ mod tests {
         h
     }
 
+    /// The active document's timeline.
     fn timeline(app: &PhotocraftApp) -> Option<Arc<DesignTimeline>> {
         app.session.active().and_then(|d| d.doc.design_timeline.clone())
     }

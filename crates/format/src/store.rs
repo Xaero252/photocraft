@@ -155,6 +155,7 @@ fn check_manifest_depth(json: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// Read, bound and migrate the manifest of `src`.
 pub(crate) fn read_manifest(src: &dyn ByteSource, opts: &LoadOptions) -> Result<Manifest> {
     let raw = src.get(MANIFEST, opts.max_manifest_bytes)?;
     // serde_json stops at 128 levels (about 40 nested groups); the bounded check replaces that limit.
@@ -838,6 +839,7 @@ impl PcraftWriter {
         self.lock_wait = wait;
     }
 
+    /// Check `doc` against the format's limits and build its manifest and the entries to write.
     fn prepare(&mut self, doc: &Document, opts: &SaveOptions) -> Result<Prepared> {
         self.hash_cache.retain(|_, (w, _)| w.strong_count() > 0);
         self.blob_hash_cache.retain(|_, (w, _)| w.strong_count() > 0);
