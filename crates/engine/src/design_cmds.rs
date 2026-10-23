@@ -68,7 +68,8 @@ fn step_index(cmd: &str, tl: &DesignTimeline, p: &Value) -> Result<usize> {
 
 /// `a` and `b` are the same document, whatever their timelines hold.
 fn same_content(a: &Document, b: &Document) -> bool {
-    let strip = |d: &Document| Document { design_timeline: None, ..d.clone() };
+    // The name is file identity (a save renames the document), never a recorded step.
+    let strip = |d: &Document| Document { design_timeline: None, name: String::new(), ..d.clone() };
     strip(a) == strip(b)
 }
 
@@ -97,9 +98,11 @@ fn change(s: &mut Session, cmd: &str, label: &str, f: impl FnOnce(&mut DesignTim
     }
     let crate::timeline::Replayed { doc: result, timeline, active, selected } = replayed;
     s.edit(label, |doc, act| {
-        let id = doc.id;
+        let (id, name) = (doc.id, std::mem::take(&mut doc.name));
         *doc = result;
         doc.id = id;
+        // The replayed checkpoint may predate a save that renamed the document.
+        doc.name = name;
         doc.design_timeline = Some(Arc::new(timeline));
         *act = active;
         Ok(())

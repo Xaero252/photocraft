@@ -229,7 +229,7 @@ fn a_change_the_timeline_did_not_record_is_never_replayed_away() {
     let mut s = started();
     s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
     s.edit("Unrecorded", |doc, _| {
-        doc.name = "renamed outside a command".into();
+        doc.resolution_dpi = 150.0;
         Ok(())
     })
     .unwrap();
@@ -425,4 +425,15 @@ fn a_step_naming_a_shared_layer_name_replays_on_the_layer_it_acted_on() {
     s.execute("design.replay", json!({})).unwrap();
     assert!(steps(&mut s).iter().all(|x| x["state"]["state"] == "ok"), "{:?}", steps(&mut s));
     assert_eq!(doc(&s), before);
+}
+
+#[test]
+fn saving_under_a_new_name_leaves_the_timeline_editable() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.execute("layer.setProps", json!({"opacity": 0.5})).unwrap();
+    s.active_mut().unwrap().saved_to("/tmp/city.pcraft".into());
+    let first = step_id(&mut s, 0);
+    s.execute("design.suppress", json!({"step": first})).unwrap();
+    assert_eq!(s.active().unwrap().doc.name, "city.pcraft", "replay keeps the saved name");
 }
