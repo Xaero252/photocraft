@@ -140,6 +140,9 @@ pub struct BakedM {
     pub selection_changed: bool,
     #[serde(default)]
     pub selection: Option<SurfaceM>,
+    /// The document's mode, depth and profile when the step changed them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<(ColorMode, SampleType, Option<Hash>)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

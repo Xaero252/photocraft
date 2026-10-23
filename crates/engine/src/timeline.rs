@@ -52,6 +52,17 @@ fn bakes(id: &str, params: &Value) -> bool {
     BAKED.contains(&id) || (id == crate::vp_cmds::VP && vp_clip())
 }
 
+/// The scratch session's gate: a timeline may come from a crafted file, so a replay stays inside
+/// the document, nested steps (`actions.play`) and smart-object renders included. Steps recorded
+/// with such a command are baked; one that isn't fails instead of running. Not the desktop
+/// variant: a mode change resolving the user's own working profile is no path a file can choose.
+fn replay_gate(id: &str, params: &Value) -> crate::Result<()> {
+    if crate::untrusted::reaches_outside(id, params) {
+        return Err(crate::EngineError::Other(format!("`{id}` reaches files outside the document, so the design timeline doesn't replay it")));
+    }
+    Ok(())
+}
+
 /// Whether a baked step's stored result can be out of date after an earlier step changes. Not
 /// for one run from another document that only added layers (a layer copied across): its pixels
 /// came from there. A paste can, though: where it lands and Paste Into's mask follow the selection.
@@ -98,9 +109,10 @@ pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, 
         }
         let (created, changed) = layer_changes(&b.state, &st.doc);
         // A command run from another document (Save Contents, closing an Edit Contents document)
-        // can't run again here: keep what it did.
-        let baked =
-            (force_bake || bakes(id, params) || !b.was_active).then(|| Arc::new(photocraft_doc::design::Baked::capture(&b.state, &st.doc, &created, &changed)));
+        // can't run again here: keep what it did. Nor can one reaching outside the document
+        // (`replay_gate`).
+        let baked = (force_bake || bakes(id, params) || crate::untrusted::reaches_outside(id, params) || !b.was_active)
+            .then(|| Arc::new(photocraft_doc::design::Baked::capture(&b.state, &st.doc, &created, &changed)));
         let entry = DesignStep {
             step,
             command: id.to_string(),
@@ -187,7 +199,6 @@ pub(crate) struct Seed {
     presets: crate::presets::PresetState,
     type_defaults: Option<(photocraft_doc::text::CharStyle, photocraft_doc::text::ParagraphStyle)>,
     quick_mask_options: crate::channel_cmds::QuickMaskOptions,
-    authorize: Option<fn(&str, &Value) -> crate::Result<()>>,
 }
 
 impl Seed {
@@ -200,7 +211,6 @@ impl Seed {
             presets: s.presets.clone(),
             type_defaults: s.type_defaults.clone(),
             quick_mask_options: s.quick_mask_options,
-            authorize: s.authorize,
         }
     }
 }
@@ -214,7 +224,7 @@ fn scratch(seed: Seed, doc: &Document) -> Session {
     r.presets = seed.presets;
     r.type_defaults = seed.type_defaults;
     r.quick_mask_options = seed.quick_mask_options;
-    r.authorize = seed.authorize;
+    r.authorize = Some(replay_gate);
     let mut doc = doc.clone();
     doc.design_timeline = None;
     r.add_document(doc, None);

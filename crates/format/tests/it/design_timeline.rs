@@ -34,7 +34,7 @@ fn step(step: u64, command: &str) -> DesignStep {
     }
 }
 
-/// A document with a timeline holding a base, steps, a baked result and a marker.
+/// A document with a timeline holding a base, steps, a baked result (with a profile) and a marker.
 fn with_timeline() -> Document {
     let _scope = IdScope::new(1).enter();
     let mut base = Document::new("d", Size::new(8, 8), ColorMode::Rgb, SampleType::U8);
@@ -47,6 +47,7 @@ fn with_timeline() -> Document {
     let mut sel = Surface::new(PixelFormat::GRAY8);
     sel.fill_rect(photocraft_geom::Rect::new(0, 0, 4, 4), &[1.0]);
     doc.selection = Some(sel);
+    doc.icc_profile = Some(Arc::new(b"profile".to_vec()));
     let mut first = step(2, "layer.new.layer");
     first.created = vec![aid];
     let mut second = step(3, "select.reselect");
@@ -66,6 +67,7 @@ fn a_timeline_round_trips_and_marks_the_file_format_2() {
     let tl = back.design_timeline.unwrap();
     let baked = tl.steps[1].baked.as_deref().unwrap();
     assert!(baked.selection.as_ref().is_some_and(Option::is_some), "the baked selection is kept");
+    assert!(baked.color.as_ref().is_some_and(|c| c.2.is_some()), "so is the profile it assigned");
     assert!(tl.steps[0].checkpoint.0.is_some(), "replay resumes from the saved document");
 }
 

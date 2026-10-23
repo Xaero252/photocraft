@@ -548,3 +548,57 @@ fn rolling_back_to_a_checkpoint_lands_at_once() {
     let mut s = three_steps();
     assert!(matches!(s.start("design.rollTo", json!({"at": 1})).unwrap(), crate::jobs::Started::Done(_)), "a dialog opens on it next");
 }
+
+/// `s`'s timeline with `command` and `params` appended as an unbaked step, as a crafted file can.
+fn with_crafted_step(s: &mut Session, command: &str, params: Value) {
+    let st = s.active_mut().unwrap();
+    let mut doc = (*st.doc).clone();
+    let mut tl = (**doc.design_timeline.as_ref().unwrap()).clone();
+    let mut step = tl.steps[0].clone();
+    (step.step, step.command, step.params, step.baked, step.created, step.changed) = (999, command.into(), params, None, Vec::new(), Vec::new());
+    tl.steps.push(step);
+    doc.design_timeline = Some(std::sync::Arc::new(tl));
+    st.doc = std::sync::Arc::new(doc);
+}
+
+#[test]
+fn a_crafted_step_that_writes_a_file_is_refused_on_replay() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    let out = std::env::temp_dir().join(format!("pc-crafted-{}.png", std::process::id()));
+    let _ = std::fs::remove_file(&out);
+    with_crafted_step(&mut s, "layer.quickExportAsPng", json!({"path": out.to_str().unwrap()}));
+    s.execute("design.replay", json!({})).unwrap();
+    assert!(!out.exists(), "a replay must not write outside the document");
+    assert_eq!(state(&mut s, 1), "error");
+    assert!(steps(&mut s)[1]["state"]["message"].as_str().unwrap().contains("outside the document"));
+}
+
+#[test]
+fn a_crafted_place_step_reads_no_file_on_replay() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    let src = std::env::temp_dir().join(format!("pc-crafted-src-{}.png", std::process::id()));
+    let png = photocraft_doc::Document::new("p", photocraft_doc::Size::new(8, 8), photocraft_doc::ColorMode::Rgb, photocraft_doc::SampleType::U8);
+    std::fs::write(&src, photocraft_io::export(&png, "p.png", &Default::default()).unwrap().bytes).unwrap();
+    let layers = s.active().unwrap().doc.walk().len();
+    with_crafted_step(&mut s, "file.placeEmbedded", json!({"path": src.to_str().unwrap()}));
+    s.execute("design.replay", json!({})).unwrap();
+    let _ = std::fs::remove_file(&src);
+    assert_eq!(s.active().unwrap().doc.walk().len(), layers, "nothing was read into the document");
+    assert_eq!(state(&mut s, 1), "error");
+}
+
+#[test]
+fn a_recorded_step_reaching_outside_the_document_is_baked_and_still_replays() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    // The working profile may be an .icc file: recorded with its result, never resolved again.
+    s.execute("edit.assignProfile", json!({"profile": "working"})).unwrap();
+    assert_eq!(commands(&mut s)[1], "edit.assignProfile");
+    assert_eq!(steps(&mut s)[1]["baked"], true);
+    let before = doc(&s);
+    s.execute("design.replay", json!({})).unwrap();
+    assert_eq!(doc(&s), before);
+    assert_eq!(state(&mut s, 1), "ok");
+}

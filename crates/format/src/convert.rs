@@ -308,6 +308,7 @@ fn design_timeline_m(t: &photocraft_doc::design::DesignTimeline, sink: &mut dyn 
                 placed: b.placed.iter().map(|(id, below, above)| (id.0, below.map(|l| l.0), above.map(|l| l.0))).collect(),
                 selection_changed: b.selection.is_some(),
                 selection: b.selection.as_ref().and_then(|s| s.as_ref().map(|s| surface_m(s, sink))),
+                color: b.color.as_ref().map(|(mode, depth, profile)| (*mode, *depth, opt_blob(profile, sink))),
             }),
         })
         .collect();
@@ -639,6 +640,10 @@ impl Loader<'_> {
                     layers: b.layers.iter().map(|l| self.layer(l, 0)).collect::<Result<Vec<_>>>()?,
                     placed: b.placed.iter().map(|(id, below, above)| (LayerId(*id), below.map(LayerId), above.map(LayerId))).collect(),
                     selection: if b.selection_changed { Some(self.opt_surface(&b.selection)?) } else { None },
+                    color: match &b.color {
+                        Some((mode, depth, profile)) => Some((*mode, *depth, self.opt_blob(profile)?)),
+                        None => None,
+                    },
                 })),
                 None => None,
             };

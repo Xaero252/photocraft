@@ -106,14 +106,20 @@ impl StepState {
     }
 }
 
+/// A document's mode, depth and ICC profile.
+pub type BakedColor = (crate::ColorMode, crate::SampleType, Option<Arc<Vec<u8>>>);
+
 /// A step's result as it came out: the layers it created and changed (a changed layer missing
 /// here was removed), for each created layer the layers directly below and above it, and the
-/// selection when the step changed it.
+/// selection and colour state when the step changed them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Baked {
     pub layers: Vec<crate::Layer>,
     pub placed: Vec<(LayerId, Option<LayerId>, Option<LayerId>)>,
     pub selection: Option<Option<crate::Surface>>,
+    /// The document's mode, depth and profile when the step changed them (Assign Profile, a mode
+    /// change): document state no layer holds.
+    pub color: Option<BakedColor>,
 }
 
 impl Baked {
@@ -133,13 +139,18 @@ impl Baked {
             })
             .collect();
         let selection = (before.selection != after.selection).then(|| after.selection.clone());
-        Baked { layers, placed, selection }
+        let color = ((before.mode, before.depth, &before.icc_profile) != (after.mode, after.depth, &after.icc_profile))
+            .then(|| (after.mode, after.depth, after.icc_profile.clone()));
+        Baked { layers, placed, selection, color }
     }
 
-    /// Put the stored layers into `doc` in place of the ones the step changed.
+    /// Put the stored layers (and selection and colour state) into `doc` in place of the step's.
     pub fn apply(&self, doc: &mut Document, created: &[LayerId], changed: &[LayerId]) {
         if let Some(sel) = &self.selection {
             doc.selection = sel.clone();
+        }
+        if let Some((mode, depth, profile)) = &self.color {
+            (doc.mode, doc.depth, doc.icc_profile) = (*mode, *depth, profile.clone());
         }
         for id in changed {
             match self.layers.iter().find(|l| l.id == *id) {
