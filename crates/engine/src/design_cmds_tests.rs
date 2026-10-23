@@ -602,3 +602,19 @@ fn a_recorded_step_reaching_outside_the_document_is_baked_and_still_replays() {
     assert_eq!(doc(&s), before);
     assert_eq!(state(&mut s, 1), "ok");
 }
+
+#[test]
+fn an_embedded_place_by_path_replays_without_its_source() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    let src = std::env::temp_dir().join(format!("pc-embedded-src-{}.png", std::process::id()));
+    let png = photocraft_doc::Document::new("p", photocraft_doc::Size::new(8, 8), photocraft_doc::ColorMode::Rgb, photocraft_doc::SampleType::U8);
+    std::fs::write(&src, photocraft_io::export(&png, "p.png", &Default::default()).unwrap().bytes).unwrap();
+    s.execute("file.placeEmbedded", json!({"path": src.to_str().unwrap()})).unwrap();
+    std::fs::remove_file(&src).unwrap();
+    assert_eq!(steps(&mut s)[1]["baked"], true);
+    let before = doc(&s);
+    s.execute("design.replay", json!({})).unwrap();
+    assert_eq!(doc(&s), before, "the placed pixels come from the step, not the file");
+    assert_eq!(state(&mut s, 1), "ok");
+}
