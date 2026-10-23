@@ -459,4 +459,36 @@ fn a_layer_copied_from_another_document_never_goes_stale() {
     assert_eq!(state(&mut s, copy), "ok");
     // A paste lands by the selection an earlier step may have changed.
     assert_eq!(state(&mut s, paste), "stale");
+    let source = s.documents()[1].doc.name.clone();
+    assert_eq!(steps(&mut s)[copy]["label"], format!("Copy from {source}"), "the step names where the layer came from");
+}
+
+#[test]
+fn a_placed_file_step_names_the_file() {
+    let label = |id: &str, p: Value| crate::timeline::step_label("Place Embedded", id, &p, None);
+    assert_eq!(label("file.placeEmbedded", json!({"path": "/art/assets/taipei.jpg"})), "Place Embedded taipei.jpg");
+    assert_eq!(label("layer.setProps", json!({"path": "x.png"})), "Place Embedded", "only place commands name a path");
+    assert_eq!(crate::timeline::step_label("Save Contents", "layer.smartObjects.saveContents", &json!({}), Some("Inner.psb")), "Save Contents from Inner.psb");
+}
+
+#[test]
+fn a_file_placed_from_a_picker_is_a_baked_step() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.execute("layer.setProps", json!({"opacity": 0.5})).unwrap();
+    let src = photocraft_doc::Document::new("p", photocraft_doc::Size::new(8, 8), photocraft_doc::ColorMode::Rgb, photocraft_doc::SampleType::U8);
+    let bytes = photocraft_io::export(&src, "p.png", &Default::default()).unwrap().bytes;
+    // File › Place… and a drop pass the bytes, not a command.
+    crate::file_cmds::place_bytes(&mut s, "p.png", bytes, None, &json!({})).unwrap();
+    let st = steps(&mut s);
+    let place = st.last().unwrap();
+    assert_eq!(place["command"], "file.placeEmbedded");
+    assert_eq!(place["baked"], true, "a replay has no bytes to place again");
+    assert_eq!(place["label"], "Place Embedded p.png");
+    let before = doc(&s);
+    s.execute("design.replay", json!({})).unwrap();
+    assert_eq!(doc(&s), before);
+    let props = step_id(&mut s, 1);
+    s.execute("design.editStep", json!({"step": props, "params": {"opacity": 0.8}})).unwrap();
+    assert_eq!(state(&mut s, 2), "ok", "a placed file doesn't depend on earlier steps");
 }

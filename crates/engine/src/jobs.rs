@@ -753,6 +753,29 @@ impl Session {
         }
     }
 
+    /// Run `f`, an edit made outside any command (a file placed from a picker's bytes), as one
+    /// design-timeline step `id` with `params`, keeping its result: a replay can't make it again.
+    /// Inside a command, that command's step records it instead.
+    pub fn record_outside<T>(&mut self, id: &str, params: Value, f: impl FnOnce(&mut Self) -> Result<T>) -> Result<T> {
+        if photocraft_doc::IdScope::current().is_some() {
+            return f(self);
+        }
+        let scope = photocraft_doc::IdScope::new(self.next_step);
+        let before = crate::timeline::capture(self);
+        let timed = !before.is_empty();
+        let r = {
+            let _g = scope.enter();
+            f(self)
+        };
+        if r.is_ok() {
+            crate::timeline::record(self, before, scope.step(), id, &params, true);
+        }
+        if scope.used() || timed {
+            self.next_step = self.next_step.max(scope.step().saturating_add(1));
+        }
+        r
+    }
+
     /// Run the command `id`: inline, or (with `background`) as a job when it is one.
     /// Ids a command mints are keyed to its step; a command run on another's behalf shares it.
     pub(crate) fn dispatch(&mut self, id: &str, params: Value, background: bool) -> Result<Started> {
@@ -768,7 +791,7 @@ impl Session {
             self.dispatch_scoped(id, params, background)
         };
         match (&r, recorded) {
-            (Ok(Started::Done(_)), Some(p)) => crate::timeline::record(self, before, scope.step(), id, &p),
+            (Ok(Started::Done(_)), Some(p)) => crate::timeline::record(self, before, scope.step(), id, &p, false),
             (Ok(Started::Job(j)), Some(p)) => {
                 if let Some(job) = self.jobs.running.iter_mut().find(|job| job.id == *j) {
                     job.timeline = Some((before, scope.step(), p));
@@ -971,7 +994,7 @@ impl Session {
             },
         };
         if let (JobOutcome::Done(_), Some((before, step, params))) = (&outcome, timeline) {
-            crate::timeline::record(self, before, step, &job.command, &params);
+            crate::timeline::record(self, before, step, &job.command, &params, false);
         }
         self.end_job(&job, outcome);
     }

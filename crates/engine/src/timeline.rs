@@ -77,12 +77,15 @@ pub(crate) fn capture(s: &Session) -> Vec<Before> {
 }
 
 /// Record command `id` (run under id-scope `step`) into each document of `before` it changed.
-pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, params: &Value) {
+/// `force_bake` keeps the result of an edit that can't run again (a file placed from bytes).
+pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, params: &Value, force_bake: bool) {
     // Queries and view-only commands (video frame navigation) aren't steps.
     if before.is_empty() || id.starts_with("design.") || !crate::commands::find(id).is_some_and(|c| c.journal) {
         return;
     }
     let mut recorded = false;
+    // The document the command ran in: a step it made in another one names it as the source.
+    let source = s.active().map(|st| st.doc.name.clone()).unwrap_or_default();
     for b in before {
         let Some(st) = s.docs.iter_mut().find(|st| st.doc.id == b.doc) else { continue };
         if Arc::ptr_eq(&st.doc, &b.state) {
@@ -96,12 +99,13 @@ pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, 
         let (created, changed) = layer_changes(&b.state, &st.doc);
         // A command run from another document (Save Contents, closing an Edit Contents document)
         // can't run again here: keep what it did.
-        let baked = (bakes(id, params) || !b.was_active).then(|| Arc::new(photocraft_doc::design::Baked::capture(&b.state, &st.doc, &created, &changed)));
+        let baked =
+            (force_bake || bakes(id, params) || !b.was_active).then(|| Arc::new(photocraft_doc::design::Baked::capture(&b.state, &st.doc, &created, &changed)));
         let entry = DesignStep {
             step,
             command: id.to_string(),
             params: resolve_names(&b.state, params),
-            label: st.history.undo_label().unwrap_or(id).to_string(),
+            label: step_label(st.history.undo_label().unwrap_or(id), id, params, (!b.was_active).then_some(source.as_str())),
             prelude: s.timeline_prelude.clone(),
             active: b.active,
             selected: b.selected,
@@ -135,6 +139,20 @@ pub(crate) fn record(s: &mut Session, before: Vec<Before>, step: u64, id: &str, 
         s.timeline_prelude.clear();
     } else if PRELUDE.iter().any(|p| id.starts_with(p)) {
         s.timeline_prelude.push(Prelude { command: id.to_string(), params: params.clone() });
+    }
+}
+
+/// A step's label: the history step's, naming where its content came from. A layer copied from
+/// another document is "Copy from <document>", any other step made from one "<label> from
+/// <document>", and a placed file "<label> <file>".
+pub(crate) fn step_label(label: &str, id: &str, params: &Value, from: Option<&str>) -> String {
+    match from {
+        Some(doc) if id == "layer.copyToDocument" => format!("Copy from {doc}"),
+        Some(doc) => format!("{label} from {doc}"),
+        None => match params.get("path").and_then(Value::as_str).filter(|_| id.starts_with("file.place")) {
+            Some(path) => format!("{label} {}", crate::file_cmds::file_name(path)),
+            None => label.to_string(),
+        },
     }
 }
 

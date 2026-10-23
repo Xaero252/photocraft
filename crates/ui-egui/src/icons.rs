@@ -31,6 +31,9 @@ pub fn image(name: &str, size: f32, tint: Color32) -> egui::Image<'static> {
 /// The icon of a History state or design timeline step, from its label.
 pub fn step_icon(label: &str) -> &'static str {
     match label {
+        // Content brought in from another document or a file (engine timeline::step_label), whose
+        // name may contain any of the words below.
+        s if s.starts_with("Copy from ") || s.starts_with("Place ") => "image",
         s if s.contains("Brush") || s.contains("Eraser") => "brush",
         // The Layers panel's controls (layer.setProps).
         "Opacity Change" | "Fill Opacity Change" | "Blending Change" => "layers",
