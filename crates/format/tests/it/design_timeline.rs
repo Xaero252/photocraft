@@ -74,3 +74,22 @@ fn a_file_without_a_timeline_stays_format_1() {
     let bytes = save_to_bytes(&doc, &SaveOptions::default()).unwrap();
     assert_eq!(stored_version(&bytes), u64::from(BASE_FORMAT_VERSION));
 }
+
+#[test]
+fn ids_are_kept_or_remapped_for_the_whole_timeline_at_once() {
+    let mut doc = with_timeline();
+    let mut tl = (**doc.design_timeline.as_ref().unwrap()).clone();
+    // An id keyed to a step near the limit makes the loader remap, here only in the base.
+    let far = {
+        let _scope = IdScope::new(photocraft_doc::MAX_STEP - 1).enter();
+        photocraft_doc::LayerId::fresh()
+    };
+    Arc::make_mut(&mut tl.base).layers[0].id = far;
+    doc.design_timeline = Some(Arc::new(tl));
+    let back = load_from_bytes(&save_to_bytes(&doc, &SaveOptions::default()).unwrap()).unwrap();
+    // A kept timeline whose base was remapped would name layers its steps can't find.
+    if let Some(t) = &back.design_timeline {
+        assert_eq!(t.base.layers[0].id, far, "the base was remapped under a kept timeline");
+    }
+    assert_ne!(back.layers[0].id, doc.layers[0].id, "the document is remapped with its timeline");
+}

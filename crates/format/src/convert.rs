@@ -32,6 +32,36 @@ pub(crate) fn check_nesting(layers: &[Layer]) -> Result<()> {
     if too_deep_at(layers, 0) { Err(too_deep()) } else { Ok(()) }
 }
 
+/// Whether to keep the stored ids of `trees`, reserving unscoped ones: not when one is implausibly
+/// large (keyed to a step near the limit, or far ahead of the unscoped counter); then the whole
+/// document is remapped while retaining shared contents groups.
+fn keep_ids(trees: &[&[LayerM]]) -> Result<bool> {
+    // [largest scoped id, largest unscoped id]
+    fn max_ids(layers: &[LayerM], depth: usize, max: &mut [u64; 2]) -> Result<()> {
+        fn note(max: &mut [u64; 2], id: u64) {
+            let m = &mut max[usize::from(photocraft_doc::id_step(id).is_none())];
+            *m = (*m).max(id);
+        }
+        if depth > MAX_GROUP_DEPTH && !layers.is_empty() {
+            return Err(too_deep());
+        }
+        for l in layers {
+            note(max, l.id);
+            match &l.content {
+                ContentM::Group { children, .. } => max_ids(children, depth + 1, max)?,
+                ContentM::Smart { contents_id: Some(id), .. } => note(max, *id),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+    let mut max = [0; 2];
+    for t in trees {
+        max_ids(t, 0, &mut max)?;
+    }
+    Ok(photocraft_doc::id_step(max[0]).is_some_and(|s| s < photocraft_doc::MAX_STEP / 2) && photocraft_doc::reserve_unscoped_id(max[1]))
+}
+
 pub(crate) trait Sink {
     /// Register a tile, returning its hash.
     fn tile(&mut self, format: PixelFormat, tile: &Arc<Tile>) -> Hash;
@@ -571,6 +601,16 @@ impl Loader<'_> {
     }
 
     pub(crate) fn document(&mut self, m: &DocM) -> Result<Document> {
+        // One decision for the document and its timeline's base and baked trees: the steps name
+        // their layers by stored id, so remapping any one tree would break them.
+        if self.preserve_ids {
+            let mut trees = vec![m.layers.as_slice()];
+            if let Some(t) = m.design_timeline.as_deref() {
+                trees.push(&t.base.layers);
+                trees.extend(t.steps.iter().filter_map(|st| st.baked.as_ref()).map(|b| b.layers.as_slice()));
+            }
+            self.preserve_ids = keep_ids(&trees)?;
+        }
         let mut doc = self.document_only(m)?;
         // ponytail: remapped ids no longer name the steps' layers, so the timeline is dropped; remap its ids too if that turns up.
         if let Some(t) = m.design_timeline.as_deref().filter(|_| self.preserve_ids) {
@@ -606,34 +646,6 @@ impl Loader<'_> {
     }
 
     fn document_only(&mut self, m: &DocM) -> Result<Document> {
-        // Keep stored ids, reserving unscoped ones, unless one is implausibly large (keyed to a
-        // step near the limit, or far ahead of the unscoped counter); then remap the whole
-        // document while retaining shared contents groups.
-        if self.preserve_ids {
-            // [largest scoped id, largest unscoped id]
-            fn max_ids(layers: &[LayerM], depth: usize, max: &mut [u64; 2]) -> Result<()> {
-                fn note(max: &mut [u64; 2], id: u64) {
-                    let m = &mut max[usize::from(photocraft_doc::id_step(id).is_none())];
-                    *m = (*m).max(id);
-                }
-                if depth > MAX_GROUP_DEPTH && !layers.is_empty() {
-                    return Err(too_deep());
-                }
-                for l in layers {
-                    note(max, l.id);
-                    match &l.content {
-                        ContentM::Group { children, .. } => max_ids(children, depth + 1, max)?,
-                        ContentM::Smart { contents_id: Some(id), .. } => note(max, *id),
-                        _ => {}
-                    }
-                }
-                Ok(())
-            }
-            let mut max = [0; 2];
-            max_ids(&m.layers, 0, &mut max)?;
-            self.preserve_ids =
-                photocraft_doc::id_step(max[0]).is_some_and(|s| s < photocraft_doc::MAX_STEP / 2) && photocraft_doc::reserve_unscoped_id(max[1]);
-        }
         let layers = m.layers.iter().map(|l| self.layer(l, 0)).collect::<Result<Vec<_>>>()?;
         let mut channels = Vec::with_capacity(m.channels.len());
         for c in &m.channels {
