@@ -36,6 +36,7 @@ pub(crate) fn check_nesting(layers: &[Layer]) -> Result<()> {
 /// far ahead of the unscoped counter; then the whole document is remapped while retaining shared
 /// contents groups. Scoped ids are always kept: past `MAX_STEP`, steps mint unscoped ids.
 fn keep_ids(trees: &[&[LayerM]]) -> Result<bool> {
+    /// Raise `max` to the largest layer or contents id in `layers`, refusing nesting past the cap.
     fn max_ids(layers: &[LayerM], depth: usize, max: &mut u64) -> Result<()> {
         if depth > MAX_GROUP_DEPTH && !layers.is_empty() {
             return Err(too_deep());
@@ -294,6 +295,7 @@ pub(crate) fn doc_m(d: &Document, sink: &mut dyn Sink) -> DocM {
     }
 }
 
+/// The manifest form of `t`: its base, steps and baked results (checkpoints are caches, not saved).
 fn design_timeline_m(t: &photocraft_doc::design::DesignTimeline, sink: &mut dyn Sink) -> DesignTimelineM {
     let steps = t
         .steps
@@ -597,6 +599,7 @@ impl Loader<'_> {
         })
     }
 
+    /// The document of `m` with its design timeline, warning when the timeline must be dropped.
     pub(crate) fn document(&mut self, m: &DocM) -> Result<Document> {
         // One decision for the document and its timeline's base and baked trees: the steps name
         // their layers by stored id, so remapping any one tree would break them.
@@ -622,6 +625,7 @@ impl Loader<'_> {
         Ok(doc)
     }
 
+    /// The timeline of the loaded `doc`; its last step in effect resumes from `doc`.
     fn design_timeline(&mut self, t: &DesignTimelineM, doc: &Document) -> Result<photocraft_doc::design::DesignTimeline> {
         use photocraft_doc::design::{Baked, Checkpoint, DesignTimeline};
         let mut base = self.document_only(&t.base)?;
@@ -648,6 +652,7 @@ impl Loader<'_> {
         Ok(tl)
     }
 
+    /// The document of `m` without its timeline, under the id decision already made.
     fn document_only(&mut self, m: &DocM) -> Result<Document> {
         let layers = m.layers.iter().map(|l| self.layer(l, 0)).collect::<Result<Vec<_>>>()?;
         let mut channels = Vec::with_capacity(m.channels.len());

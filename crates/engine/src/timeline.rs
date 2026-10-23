@@ -191,6 +191,7 @@ pub(crate) struct Seed {
 }
 
 impl Seed {
+    /// Take what a replay needs from `s`.
     pub(crate) fn of(s: &Session) -> Self {
         Self {
             tools: s.tools.clone(),
@@ -204,6 +205,7 @@ impl Seed {
     }
 }
 
+/// A session holding only `doc` (without its timeline) and the settings commands read.
 fn scratch(seed: Seed, doc: &Document) -> Session {
     let mut r = Session::new();
     r.tools = seed.tools;
@@ -331,6 +333,7 @@ fn run_step(r: &mut Session, step: &mut DesignStep) {
     finish(r, step, if placed_elsewhere { StepState::PlacedElsewhere } else { StepState::Ok });
 }
 
+/// Put a baked step's stored result in place of running it.
 fn apply_baked(r: &mut Session, step: &DesignStep, baked: &photocraft_doc::design::Baked) -> crate::Result<()> {
     let st = r.active_mut().ok_or(crate::EngineError::NoDocument)?;
     let mut doc = (*st.doc).clone();

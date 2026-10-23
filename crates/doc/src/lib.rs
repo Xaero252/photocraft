@@ -76,6 +76,7 @@ pub struct IdScope {
 }
 
 impl IdScope {
+    /// A scope minting ids for step `step`, from its first counter value.
     pub fn new(step: u64) -> Self {
         IdScope { step, next: Arc::new(AtomicU64::new(1)) }
     }
@@ -85,6 +86,7 @@ impl IdScope {
         ID_SCOPE.with(|s| s.borrow().clone())
     }
 
+    /// The step this scope mints ids for.
     pub fn step(&self) -> u64 {
         self.step
     }
@@ -99,6 +101,7 @@ impl IdScope {
         IdScopeGuard(ID_SCOPE.with(|s| s.replace(Some(self.clone()))))
     }
 
+    /// The next id of this step, or `None` once the step or its counter is out of range.
     fn mint(&self) -> Option<u64> {
         let n = self.next.fetch_add(1, Ordering::Relaxed);
         // ponytail: past 16M ids in one step, or a step past MAX_STEP, ids fall back to the unscoped
@@ -111,11 +114,13 @@ impl IdScope {
 pub struct IdScopeGuard(Option<IdScope>);
 
 impl Drop for IdScopeGuard {
+    /// Reinstall the scope this guard replaced.
     fn drop(&mut self) {
         ID_SCOPE.with(|s| *s.borrow_mut() = self.0.take());
     }
 }
 
+/// The next id: from the installed step scope, else from the unscoped counter.
 fn next_id() -> u64 {
     ID_SCOPE
         .with(|s| s.borrow().as_ref().and_then(IdScope::mint))

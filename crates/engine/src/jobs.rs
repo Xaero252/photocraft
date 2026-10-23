@@ -807,6 +807,7 @@ impl Session {
         r
     }
 
+    /// [`Session::dispatch`] inside the step's id scope: validate, run and journal the command.
     fn dispatch_scoped(&mut self, id: &str, params: Value, background: bool) -> Result<Started> {
         let spec = crate::commands::find(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
         // Params are named fields: anything but an object (or null, meaning none) is a caller

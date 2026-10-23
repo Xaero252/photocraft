@@ -11,10 +11,12 @@ use crate::commands::CommandSpec;
 pub use crate::timeline::BAKED;
 use crate::{EngineError, Result, Session};
 
+/// The active document's timeline, or why there is none.
 fn timeline_of(s: &Session) -> std::result::Result<&Arc<DesignTimeline>, String> {
     s.active().ok_or("no document open")?.doc.design_timeline.as_ref().ok_or_else(|| "the design timeline is off".into())
 }
 
+/// Start's precondition: a document whose timeline is off.
 fn can_start(s: &Session) -> std::result::Result<(), String> {
     match s.active().ok_or("no document open")?.doc.design_timeline {
         Some(_) => Err("the design timeline is already on".into()),
@@ -22,6 +24,7 @@ fn can_start(s: &Session) -> std::result::Result<(), String> {
     }
 }
 
+/// `design.start`: record from the current document on, as one undoable edit.
 fn start(s: &mut Session, _: &Value) -> Result<Value> {
     can_start(s).map_err(EngineError::Other)?;
     s.edit("Start Design Timeline", |doc, _| {
@@ -31,6 +34,7 @@ fn start(s: &mut Session, _: &Value) -> Result<Value> {
     Ok(json!({"started": true}))
 }
 
+/// `design.stop`: drop the timeline and its steps, as one undoable edit.
 fn stop(s: &mut Session, _: &Value) -> Result<Value> {
     timeline_of(s).map_err(EngineError::Other)?;
     s.edit("Stop Design Timeline", |doc, _| {
@@ -40,6 +44,7 @@ fn stop(s: &mut Session, _: &Value) -> Result<Value> {
     Ok(json!({"stopped": true}))
 }
 
+/// `design.list`: every step with its outcome, the marker and how many steps are in effect.
 fn list(s: &mut Session, _: &Value) -> Result<Value> {
     let tl = timeline_of(s).map_err(EngineError::Other)?;
     let steps: Vec<Value> = tl
@@ -56,6 +61,7 @@ fn list(s: &mut Session, _: &Value) -> Result<Value> {
     Ok(json!({"steps": steps, "marker": tl.marker, "inEffect": tl.in_effect()}))
 }
 
+/// A parameter error for `cmd`.
 fn bad(cmd: &str, msg: impl Into<String>) -> EngineError {
     EngineError::BadParams { cmd: cmd.into(), msg: msg.into() }
 }
@@ -105,6 +111,7 @@ fn change(s: &mut Session, cmd: &str, label: &str, f: impl FnOnce(&mut DesignTim
     crate::jobs::run(s, label, true, work, apply)
 }
 
+/// Put a replay's document and timeline in place as one undoable edit, keeping the document's identity.
 fn commit(s: &mut Session, label: &str, mut replayed: crate::timeline::Replayed) -> Result<Value> {
     if let Some(st) = s.active() {
         crate::timeline::budget_checkpoints(&st.history, &st.doc, &mut replayed.timeline);
@@ -127,6 +134,7 @@ fn commit(s: &mut Session, label: &str, mut replayed: crate::timeline::Replayed)
     list(s, &Value::Null)
 }
 
+/// `design.suppress` / `design.unsuppress`: skip or restore a step, then replay from it.
 fn suppress(s: &mut Session, p: &Value, on: bool) -> Result<Value> {
     let (cmd, label) = if on { ("design.suppress", "Suppress Step") } else { ("design.unsuppress", "Unsuppress Step") };
     change(s, cmd, label, |tl| {
@@ -138,6 +146,7 @@ fn suppress(s: &mut Session, p: &Value, on: bool) -> Result<Value> {
     })
 }
 
+/// `design.delete`: remove a step, then replay from where it was.
 fn delete(s: &mut Session, p: &Value) -> Result<Value> {
     change(s, "design.delete", "Delete Step", |tl| {
         let i = step_index("design.delete", tl, p)?;
@@ -151,6 +160,7 @@ fn delete(s: &mut Session, p: &Value) -> Result<Value> {
     })
 }
 
+/// `design.rollTo`: move the marker (`at` steps in effect, null = all) and rebuild the document there.
 fn roll_to(s: &mut Session, p: &Value) -> Result<Value> {
     change(s, "design.rollTo", "Move Timeline Marker", |tl| {
         let was = tl.in_effect();
@@ -168,6 +178,7 @@ fn roll_to(s: &mut Session, p: &Value) -> Result<Value> {
     })
 }
 
+/// `design.editStep`: give a step new parameters and replay from it.
 fn edit_step(s: &mut Session, p: &Value) -> Result<Value> {
     change(s, "design.editStep", "Edit Step", |tl| {
         let i = step_index("design.editStep", tl, p)?;
@@ -193,10 +204,12 @@ fn edit_step(s: &mut Session, p: &Value) -> Result<Value> {
     })
 }
 
+/// `design.replay`: rebuild the document from the base through every step in effect.
 fn replay_all(s: &mut Session, _: &Value) -> Result<Value> {
     change(s, "design.replay", "Replay Timeline", |_| Ok((0, false)))
 }
 
+/// The step commands' precondition: the timeline is on.
 fn has_timeline(s: &Session) -> std::result::Result<(), String> {
     timeline_of(s).map(|_| ())
 }
@@ -207,6 +220,7 @@ macro_rules! step_cmd {
     };
 }
 
+/// The design timeline commands.
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec {

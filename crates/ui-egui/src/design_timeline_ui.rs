@@ -35,14 +35,17 @@ pub struct DesignTimelineUi {
     pub open: bool,
 }
 
+/// The Window menu check mark for the panel.
 pub fn checked(app: &PhotocraftApp, id: &str) -> Option<bool> {
     (id == ID).then_some(app.ui.design_timeline.open)
 }
 
+/// Whether `id` is the panel's menu command.
 pub fn handles(id: &str) -> bool {
     id == ID
 }
 
+/// Window › Design Timeline: show or hide the panel.
 pub fn menu(app: &mut PhotocraftApp, id: &str, _params: &Value) -> Option<Result<Value, String>> {
     (id == ID).then(|| {
         app.ui.design_timeline.open = !app.ui.design_timeline.open;
@@ -68,6 +71,7 @@ enum Act {
     Close,
 }
 
+/// Whether `command` has a dialog Edit Parameters can open.
 fn has_dialog(command: &str) -> bool {
     crate::filter_dialog::has_dialog(command) || crate::adjust_dialog::has_dialog(command)
 }
@@ -78,6 +82,7 @@ fn swatch(doc: &Document, st: &DesignStep, t: &Tokens) -> Option<Color32> {
     t.layer_label_colors(doc.layer(*id)?.label).map(|(c, _)| c)
 }
 
+/// A step icon's colour: red for a failure, yellow for a warning, faint past the marker.
 fn tint(st: &DesignStep, dimmed: bool, t: &Tokens) -> Color32 {
     match describe(&st.state).1 {
         Some(true) => t.danger,
@@ -153,6 +158,7 @@ fn step_menu(ui: &mut egui::Ui, i: usize, st: &DesignStep, act: &mut Option<Act>
     }
 }
 
+/// Move the marker to `at` of `n` steps (the end as null).
 fn roll(at: usize, n: usize) -> Act {
     Act::Run("design.rollTo", json!({ "at": if at >= n { Value::Null } else { json!(at) } }))
 }
@@ -196,6 +202,7 @@ pub fn strip(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     finish(app, act);
 }
 
+/// The strip's roll buttons and step icons.
 fn strip_body(ui: &mut egui::Ui, doc: &Document, tl: &Arc<DesignTimeline>, t: &Tokens, act: &mut Option<Act>) {
     let n = tl.steps.len();
     let at = tl.in_effect();
@@ -312,6 +319,7 @@ pub fn list(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     finish(app, act);
 }
 
+/// Carry out what the panel's user asked for this frame.
 fn finish(app: &mut PhotocraftApp, act: Option<Act>) {
     let r = match act {
         None => return,

@@ -22,6 +22,7 @@ pub struct DesignTimeline {
 }
 
 impl DesignTimeline {
+    /// An empty timeline starting from `base`.
     pub fn new(base: Arc<Document>) -> Self {
         DesignTimeline { base, steps: Vec::new(), marker: None }
     }
@@ -31,6 +32,7 @@ impl DesignTimeline {
         self.marker.map_or(self.steps.len(), |m| m.min(self.steps.len()))
     }
 
+    /// The position of the step with id `step`.
     pub fn index_of(&self, step: u64) -> Option<usize> {
         self.steps.iter().position(|s| s.step == step)
     }
@@ -98,6 +100,7 @@ pub enum StepState {
 }
 
 impl StepState {
+    /// The step couldn't replay as recorded (an error, a missing layer, another target).
     pub fn is_failure(&self) -> bool {
         matches!(self, StepState::Error { .. } | StepState::MissingReference { .. } | StepState::Retargeted { .. })
     }
@@ -166,6 +169,7 @@ impl Baked {
 pub struct Checkpoint(pub Option<Arc<Document>>);
 
 impl PartialEq for Checkpoint {
+    /// Always equal: a cache never makes two timelines differ.
     fn eq(&self, _: &Self) -> bool {
         true
     }
@@ -195,6 +199,7 @@ fn same_layer(a: &crate::Layer, b: &crate::Layer) -> bool {
     }
 }
 
+/// A copy of `l` without its children.
 fn strip_children(l: &crate::Layer) -> crate::Layer {
     let mut l = l.clone();
     if let Some(c) = l.children_mut() {
