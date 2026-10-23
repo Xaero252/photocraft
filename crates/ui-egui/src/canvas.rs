@@ -2261,6 +2261,15 @@ pub(crate) fn ensure_filter_preview(app: &mut PhotocraftApp, idx: usize, ctx: &e
     Some((preview.key.k, key, [result.size.width, result.size.height]))
 }
 
+/// Compute the open dialog's preview on this thread, so its first frame already shows the result.
+/// Edit Parameters rolls the document back before opening the dialog; waiting for the worker
+/// would flash the rolled-back document in between.
+pub(crate) fn prime_filter_preview(app: &mut PhotocraftApp, idx: usize, ctx: &egui::Context) {
+    let background = std::mem::replace(&mut app.background_jobs, false);
+    ensure_filter_preview(app, idx, ctx);
+    app.background_jobs = background;
+}
+
 /// Channel overlays must use the filter's current proxy too, including on the CPU canvas.
 /// The cache key changes with the completed request; unchanged frames reuse the overlay texture.
 pub(crate) fn filter_channel_preview(app: &mut PhotocraftApp, idx: usize, ctx: &egui::Context) -> Option<(std::sync::Arc<Document>, u64)> {

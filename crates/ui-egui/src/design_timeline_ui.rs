@@ -193,7 +193,7 @@ pub fn strip(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             });
         },
     );
-    finish(app, act);
+    finish(app, ui.ctx(), act);
 }
 
 fn strip_body(ui: &mut egui::Ui, doc: &Document, tl: &Arc<DesignTimeline>, t: &Tokens, act: &mut Option<Act>) {
@@ -309,10 +309,10 @@ pub fn list(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             }
         }
     }
-    finish(app, act);
+    finish(app, ui.ctx(), act);
 }
 
-fn finish(app: &mut PhotocraftApp, act: Option<Act>) {
+fn finish(app: &mut PhotocraftApp, ctx: &egui::Context, act: Option<Act>) {
     let r = match act {
         None => return,
         Some(Act::Close) => {
@@ -320,7 +320,7 @@ fn finish(app: &mut PhotocraftApp, act: Option<Act>) {
             return;
         }
         Some(Act::Run(cmd, p)) => app.run(cmd, p).map(drop),
-        Some(Act::Edit(i)) => edit(app, i),
+        Some(Act::Edit(i)) => edit(app, ctx, i),
     };
     if let Err(e) = r {
         app.ui.status = e;
@@ -329,7 +329,7 @@ fn finish(app: &mut PhotocraftApp, act: Option<Act>) {
 
 /// Edit Parameters: roll back to just before step `i` (so the dialog previews on what the step
 /// saw), open its dialog with the recorded values, and remember where the marker was.
-fn edit(app: &mut PhotocraftApp, i: usize) -> Result<(), String> {
+fn edit(app: &mut PhotocraftApp, ctx: &egui::Context, i: usize) -> Result<(), String> {
     let tl = app.session.active().and_then(|d| d.doc.design_timeline.clone()).ok_or("the design timeline is off")?;
     let st = tl.steps.get(i).ok_or("no such step")?;
     app.run("design.rollTo", json!({ "at": i }))?;
@@ -339,6 +339,9 @@ fn edit(app: &mut PhotocraftApp, i: usize) -> Result<(), String> {
             d.fields.extend(o.iter().map(|(k, v)| (k.clone(), v.clone())));
         }
         d.fields.insert(EDIT.into(), json!({ "step": st.step, "restore": tl.marker }));
+    }
+    if let Some(idx) = app.session.active_index() {
+        crate::canvas::prime_filter_preview(app, idx, ctx);
     }
     Ok(())
 }
@@ -451,7 +454,7 @@ mod tests {
         a.run("filter.noise.addNoise", json!({"amount": 10})).unwrap();
         a.run("layer.new.layer", json!({"name": "B"})).unwrap();
         assert!(has_dialog("filter.noise.addNoise"));
-        edit(&mut a, 1).unwrap();
+        edit(&mut a, &egui::Context::default(), 1).unwrap();
         assert_eq!(timeline(&a).unwrap().in_effect(), 1, "the dialog previews on what the step saw");
         let d = a.ui.dialogs.last().unwrap().id;
         a.ui.dialog_mut(d).unwrap().fields.insert("amount".into(), json!(40));
@@ -460,9 +463,27 @@ mod tests {
         assert_eq!(tl.steps[1].params["amount"], json!(40));
         assert_eq!(tl.in_effect(), 3, "the marker goes back to the end");
         // Cancel puts the marker back too.
-        edit(&mut a, 1).unwrap();
+        edit(&mut a, &egui::Context::default(), 1).unwrap();
         let d = a.ui.dialogs.last().unwrap().id;
         crate::dialogs::cancel(&mut a, d).unwrap();
         assert_eq!(timeline(&a).unwrap().in_effect(), 3);
+    }
+
+    #[test]
+    fn edit_parameters_opens_with_its_preview_ready() {
+        let mut a = app();
+        a.run("design.start", json!({})).unwrap();
+        a.run("layer.new.layer", json!({"name": "A"})).unwrap();
+        a.run("edit.fillForeground", json!({})).unwrap();
+        a.run("filter.noise.addNoise", json!({"amount": 10})).unwrap();
+        // As in the desktop app: previews compute on a worker.
+        a.background_jobs = true;
+        edit(&mut a, &egui::Context::default(), 2).unwrap();
+        // Waiting for the worker would show the rolled-back document, without the step, first.
+        let d = a.ui.dialogs.last().unwrap().id;
+        let p = a.filter_preview.as_ref().expect("a preview on the dialog's first frame");
+        assert_eq!(p.key.dialog, d);
+        assert!(p.result.is_some());
+        assert!(a.background_jobs, "background previews stay on for the dialog's later changes");
     }
 }
