@@ -33,33 +33,28 @@ pub(crate) fn check_nesting(layers: &[Layer]) -> Result<()> {
 }
 
 /// Whether to keep the stored ids of `trees`, reserving unscoped ones: not when one is implausibly
-/// large (keyed to a step near the limit, or far ahead of the unscoped counter); then the whole
-/// document is remapped while retaining shared contents groups.
+/// far ahead of the unscoped counter; then the whole document is remapped while retaining shared
+/// contents groups. Scoped ids are always kept: past `MAX_STEP`, steps mint unscoped ids.
 fn keep_ids(trees: &[&[LayerM]]) -> Result<bool> {
-    // [largest scoped id, largest unscoped id]
-    fn max_ids(layers: &[LayerM], depth: usize, max: &mut [u64; 2]) -> Result<()> {
-        fn note(max: &mut [u64; 2], id: u64) {
-            let m = &mut max[usize::from(photocraft_doc::id_step(id).is_none())];
-            *m = (*m).max(id);
-        }
+    fn max_ids(layers: &[LayerM], depth: usize, max: &mut u64) -> Result<()> {
         if depth > MAX_GROUP_DEPTH && !layers.is_empty() {
             return Err(too_deep());
         }
         for l in layers {
-            note(max, l.id);
+            *max = (*max).max(l.id);
             match &l.content {
                 ContentM::Group { children, .. } => max_ids(children, depth + 1, max)?,
-                ContentM::Smart { contents_id: Some(id), .. } => note(max, *id),
+                ContentM::Smart { contents_id: Some(id), .. } => *max = (*max).max(*id),
                 _ => {}
             }
         }
         Ok(())
     }
-    let mut max = [0; 2];
+    let mut max = 0;
     for t in trees {
         max_ids(t, 0, &mut max)?;
     }
-    Ok(photocraft_doc::id_step(max[0]).is_some_and(|s| s < photocraft_doc::MAX_STEP / 2) && photocraft_doc::reserve_unscoped_id(max[1]))
+    Ok(photocraft_doc::reserve_unscoped_id(max))
 }
 
 pub(crate) trait Sink {
@@ -364,6 +359,8 @@ pub(crate) struct Loader<'a> {
     /// budget once per distinct tile and hands every reference the same copy-on-write `Arc`
     /// (#3315). Grouped by sample type: in-memory byte order depends on it.
     pub tiles: std::collections::HashMap<SampleType, std::collections::HashMap<Hash, Arc<Tile>>>,
+    /// What loaded without part of its stored data, for the open's warnings.
+    pub warnings: Vec<String>,
 }
 
 impl Loader<'_> {
@@ -610,9 +607,15 @@ impl Loader<'_> {
                 trees.extend(t.steps.iter().filter_map(|st| st.baked.as_ref()).map(|b| b.layers.as_slice()));
             }
             self.preserve_ids = keep_ids(&trees)?;
+            // Remapped ids would no longer name the steps' layers: the image opens without its
+            // timeline, and the user is told before a save makes that permanent.
+            if !self.preserve_ids && m.design_timeline.is_some() {
+                self.warnings
+                    .push("its design timeline names layer ids this build can't keep; the image opened without its history, and saving it removes the history from the file".into());
+            }
         }
         let mut doc = self.document_only(m)?;
-        // ponytail: remapped ids no longer name the steps' layers, so the timeline is dropped; remap its ids too if that turns up.
+        // Loaded without its ids (embedded as a smart object's contents, say), it has no timeline.
         if let Some(t) = m.design_timeline.as_deref().filter(|_| self.preserve_ids) {
             doc.design_timeline = Some(Arc::new(self.design_timeline(t, &doc)?));
         }

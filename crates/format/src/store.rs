@@ -287,6 +287,11 @@ fn admit_canvas(size: photocraft_geom::Size, opts: &LoadOptions) -> Result<()> {
 }
 
 pub(crate) fn load(src: &dyn ByteSource, opts: &LoadOptions) -> Result<Document> {
+    load_reporting(src, opts).map(|(doc, _)| doc)
+}
+
+/// [`load`], with what loaded without part of its stored data.
+pub(crate) fn load_reporting(src: &dyn ByteSource, opts: &LoadOptions) -> Result<(Document, Vec<String>)> {
     let m = read_manifest(src, opts)?;
     admit_canvas(m.document.size, opts)?;
     let mut fetch = LoadFetch { src, opts: *opts, total: 0, blobs: HashMap::new() };
@@ -297,8 +302,10 @@ pub(crate) fn load(src: &dyn ByteSource, opts: &LoadOptions) -> Result<Document>
         contents_id_map: HashMap::new(),
         legacy_linked_contents: HashMap::new(),
         tiles: HashMap::new(),
+        warnings: Vec::new(),
     };
-    loader.document(&m.document)
+    let doc = loader.document(&m.document)?;
+    Ok((doc, loader.warnings))
 }
 
 // ---------------------------------------------------------------------------

@@ -162,6 +162,13 @@ pub fn load_from_bytes_with(bytes: &[u8], opts: &LoadOptions) -> Result<Document
     store::load(&src, opts)
 }
 
+/// [`load_from_bytes_with`], with warnings for what loaded without part of its stored data (a
+/// design timeline whose layer ids couldn't be kept).
+pub fn load_from_bytes_reporting(bytes: &[u8], opts: &LoadOptions) -> Result<(Document, Vec<String>)> {
+    let src = store::ZipSource::new(bytes)?;
+    store::load_reporting(&src, opts)
+}
+
 /// Load a bundle from a path: a directory bundle or a ZIP file.
 pub fn load_path(path: &Path) -> Result<Document> {
     load_path_with(path, &LoadOptions::default())

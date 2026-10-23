@@ -76,20 +76,37 @@ fn a_file_without_a_timeline_stays_format_1() {
 }
 
 #[test]
-fn ids_are_kept_or_remapped_for_the_whole_timeline_at_once() {
+fn a_timeline_whose_ids_cannot_be_kept_opens_without_it_and_says_so() {
     let mut doc = with_timeline();
     let mut tl = (**doc.design_timeline.as_ref().unwrap()).clone();
-    // An id keyed to a step near the limit makes the loader remap, here only in the base.
-    let far = {
+    // An unscoped id far ahead of the counter makes the loader remap, here only in the base.
+    let far = photocraft_doc::LayerId((1 << 52) + 50_000_000);
+    Arc::make_mut(&mut tl.base).layers[0].id = far;
+    doc.design_timeline = Some(Arc::new(tl));
+    let bytes = save_to_bytes(&doc, &SaveOptions::default()).unwrap();
+    // Remapped, the steps would name layers they can't find: the image opens without them, and
+    // the user hears of it before a save erases the history.
+    let (back, warnings) = load_from_bytes_reporting(&bytes, &LoadOptions::default()).unwrap();
+    assert!(back.design_timeline.is_none());
+    assert_ne!(back.layers[0].id, doc.layers[0].id, "the document is remapped with its timeline");
+    assert!(warnings.iter().any(|w| w.contains("design timeline")), "{warnings:?}");
+    // Without a timeline the same ids are remapped with nothing to report.
+    doc.design_timeline = None;
+    let (_, warnings) = load_from_bytes_reporting(&save_to_bytes(&doc, &SaveOptions::default()).unwrap(), &LoadOptions::default()).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
+fn a_timeline_keyed_to_a_step_near_the_limit_keeps_its_ids() {
+    let mut doc = with_timeline();
+    let mut tl = (**doc.design_timeline.as_ref().unwrap()).clone();
+    let late = {
         let _scope = IdScope::new(photocraft_doc::MAX_STEP - 1).enter();
         photocraft_doc::LayerId::fresh()
     };
-    Arc::make_mut(&mut tl.base).layers[0].id = far;
+    Arc::make_mut(&mut tl.base).layers[0].id = late;
     doc.design_timeline = Some(Arc::new(tl));
-    let back = load_from_bytes(&save_to_bytes(&doc, &SaveOptions::default()).unwrap()).unwrap();
-    // A kept timeline whose base was remapped would name layers its steps can't find.
-    if let Some(t) = &back.design_timeline {
-        assert_eq!(t.base.layers[0].id, far, "the base was remapped under a kept timeline");
-    }
-    assert_ne!(back.layers[0].id, doc.layers[0].id, "the document is remapped with its timeline");
+    let (back, warnings) = load_from_bytes_reporting(&save_to_bytes(&doc, &SaveOptions::default()).unwrap(), &LoadOptions::default()).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(back.design_timeline.expect("the timeline survives").base.layers[0].id, late);
 }
