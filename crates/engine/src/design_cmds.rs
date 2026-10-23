@@ -92,7 +92,20 @@ fn change(s: &mut Session, cmd: &str, label: &str, f: impl FnOnce(&mut DesignTim
     }
     let mut next = (*tl).clone();
     let (from, changed) = f(&mut next)?;
-    let mut replayed = crate::timeline::replay(s, &next, from, changed.then_some(from))?;
+    let steps = crate::timeline::steps_to_run(&next, from);
+    let seed = crate::timeline::Seed::of(s);
+    let work = move |ctx: &crate::jobs::JobCtx| crate::timeline::replay(seed, &next, from, changed.then_some(from), ctx);
+    let label_owned = label.to_string();
+    let apply = move |s: &mut Session, replayed| commit(s, &label_owned, replayed);
+    // Replaying steps can take seconds: a background start runs it as a job (progress, Cancel).
+    // Restoring a checkpoint runs none, so it lands at once, before a dialog opens on it.
+    if steps == 0 {
+        return apply(s, work(&crate::jobs::JobCtx::new())?);
+    }
+    crate::jobs::run(s, label, true, work, apply)
+}
+
+fn commit(s: &mut Session, label: &str, mut replayed: crate::timeline::Replayed) -> Result<Value> {
     if let Some(st) = s.active() {
         crate::timeline::budget_checkpoints(&st.history, &st.doc, &mut replayed.timeline);
     }
@@ -163,6 +176,19 @@ fn edit_step(s: &mut Session, p: &Value) -> Result<Value> {
             st.params = params.clone();
             st.rerecord = true;
         }
+        // Edit Parameters puts the marker back in the same replay rather than a second one.
+        if let Some(at) = p.get("restore") {
+            tl.marker = match at {
+                Value::Null => None,
+                v => Some(
+                    v.as_u64()
+                        .and_then(|n| usize::try_from(n).ok())
+                        .filter(|n| *n <= tl.steps.len())
+                        .ok_or_else(|| bad("design.editStep", format!("`restore` must be a step count from 0 to {} (null = the end)", tl.steps.len())))?,
+                ),
+            }
+            .filter(|n| *n < tl.steps.len());
+        }
         Ok((i, true))
     })
 }
@@ -217,7 +243,12 @@ pub fn specs() -> Vec<CommandSpec> {
         step_cmd!("design.unsuppress", "Unsuppress Step", "{step} → design.list", |s, p| suppress(s, p, false)),
         step_cmd!("design.delete", "Delete Step", "{step} → design.list", delete),
         step_cmd!("design.rollTo", "Move Timeline Marker", "{at: steps in effect, null = the end} → design.list (new edits go in at the marker)", roll_to),
-        step_cmd!("design.editStep", "Edit Step", "{step, params} → design.list (replays the step with new params)", edit_step),
+        step_cmd!(
+            "design.editStep",
+            "Edit Step",
+            "{step, params, restore?} → design.list (replays the step with new params; `restore` then moves the marker, null = the end)",
+            edit_step
+        ),
         step_cmd!("design.replay", "Replay Timeline", "{} → design.list (re-runs every step)", replay_all),
     ]
 }

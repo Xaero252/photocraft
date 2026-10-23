@@ -179,31 +179,75 @@ pub(crate) struct Replayed {
 
 /// A session to replay in: `doc` alone, with this session's tool, preset and preference state,
 /// so the live session's history, jobs and journal are untouched.
-fn scratch(s: &Session, doc: &Document) -> Session {
+/// What a replay needs from the session, taken on its thread so the replay can run on a worker.
+pub(crate) struct Seed {
+    tools: crate::ToolState,
+    prefs: crate::prefs::PrefsStore,
+    patterns: crate::pattern_cmds::PatternLibrary,
+    presets: crate::presets::PresetState,
+    type_defaults: Option<(photocraft_doc::text::CharStyle, photocraft_doc::text::ParagraphStyle)>,
+    quick_mask_options: crate::channel_cmds::QuickMaskOptions,
+    authorize: Option<fn(&str, &Value) -> crate::Result<()>>,
+}
+
+impl Seed {
+    pub(crate) fn of(s: &Session) -> Self {
+        Self {
+            tools: s.tools.clone(),
+            prefs: s.prefs.clone(),
+            patterns: s.patterns.clone(),
+            presets: s.presets.clone(),
+            type_defaults: s.type_defaults.clone(),
+            quick_mask_options: s.quick_mask_options,
+            authorize: s.authorize,
+        }
+    }
+}
+
+fn scratch(seed: Seed, doc: &Document) -> Session {
     let mut r = Session::new();
-    r.tools = s.tools.clone();
-    r.prefs = s.prefs.clone();
-    r.patterns = s.patterns.clone();
-    r.presets = s.presets.clone();
-    r.type_defaults = s.type_defaults.clone();
-    r.quick_mask_options = s.quick_mask_options;
-    r.authorize = s.authorize;
+    r.tools = seed.tools;
+    r.prefs = seed.prefs;
+    r.patterns = seed.patterns;
+    r.presets = seed.presets;
+    r.type_defaults = seed.type_defaults;
+    r.quick_mask_options = seed.quick_mask_options;
+    r.authorize = seed.authorize;
     let mut doc = doc.clone();
     doc.design_timeline = None;
     r.add_document(doc, None);
     r
 }
 
-/// The document `tl` produces from the first step at or before `from` with a checkpoint to the
-/// marker, with every replayed step's outcome and checkpoint updated.
-/// Baked steps after `changed` (the step the change was made at) are marked stale.
-pub(crate) fn replay(s: &Session, tl: &photocraft_doc::design::DesignTimeline, from: usize, changed: Option<usize>) -> crate::Result<Replayed> {
-    let mut tl = tl.clone();
-    let end = tl.in_effect();
-    let mut start = from.min(end);
+/// The step a replay of `tl` from `from` starts at: the first at or before it with a checkpoint
+/// before it.
+fn resume_at(tl: &photocraft_doc::design::DesignTimeline, from: usize) -> usize {
+    let mut start = from.min(tl.in_effect());
     while start > 0 && tl.steps.get(start - 1).is_none_or(|st| st.checkpoint.0.is_none()) {
         start -= 1;
     }
+    start
+}
+
+/// How many steps a replay of `tl` from `from` runs.
+pub(crate) fn steps_to_run(tl: &photocraft_doc::design::DesignTimeline, from: usize) -> usize {
+    tl.in_effect() - resume_at(tl, from)
+}
+
+/// The document `tl` produces from the first step at or before `from` with a checkpoint to the
+/// marker, with every replayed step's outcome and checkpoint updated.
+/// Baked steps after `changed` (the step the change was made at) are marked stale.
+/// Reports progress per step on `ctx` and stops when it is cancelled.
+pub(crate) fn replay(
+    seed: Seed,
+    tl: &photocraft_doc::design::DesignTimeline,
+    from: usize,
+    changed: Option<usize>,
+    ctx: &crate::jobs::JobCtx,
+) -> crate::Result<Replayed> {
+    let mut tl = tl.clone();
+    let end = tl.in_effect();
+    let start = resume_at(&tl, from);
     let resume = match start {
         0 => tl.base.clone(),
         k => tl
@@ -212,8 +256,10 @@ pub(crate) fn replay(s: &Session, tl: &photocraft_doc::design::DesignTimeline, f
             .and_then(|st| st.checkpoint.0.clone())
             .ok_or_else(|| crate::EngineError::Other("internal error: no checkpoint to replay from".into()))?,
     };
-    let mut r = scratch(s, &resume);
+    let mut r = scratch(seed, &resume);
     for (i, step) in tl.steps.iter_mut().enumerate().take(end).skip(start) {
+        ctx.check()?;
+        ctx.progress((i - start) as f32 / (end - start) as f32, &format!("Step {} of {end}", i + 1));
         let stale = can_go_stale(step) && (step.state == StepState::Stale || changed.is_some_and(|c| i > c));
         run_step(&mut r, step);
         if stale && !step.state.is_failure() {

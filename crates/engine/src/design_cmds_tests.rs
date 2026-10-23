@@ -492,3 +492,51 @@ fn a_file_placed_from_a_picker_is_a_baked_step() {
     s.execute("design.editStep", json!({"step": props, "params": {"opacity": 0.8}})).unwrap();
     assert_eq!(state(&mut s, 2), "ok", "a placed file doesn't depend on earlier steps");
 }
+
+fn layer_a(s: &Session) -> photocraft_doc::Layer {
+    let doc = &s.active().unwrap().doc;
+    doc.layer(crate::commands::layer_named(doc, "A").unwrap()).unwrap().clone()
+}
+
+fn three_steps() -> Session {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "A"})).unwrap();
+    s.execute("layer.setProps", json!({"opacity": 0.5})).unwrap();
+    s.execute("layer.setProps", json!({"visible": false})).unwrap();
+    s
+}
+
+#[test]
+fn edit_parameters_replays_once_reporting_each_step_and_puts_the_marker_back() {
+    let mut s = three_steps();
+    let props = step_id(&mut s, 1);
+    s.execute("design.rollTo", json!({"at": 1})).unwrap();
+    let ctx = crate::jobs::JobCtx::new();
+    s.set_inline_job_ctx(Some(ctx.clone()));
+    let r = s.execute("design.editStep", json!({"step": props, "params": {"opacity": 0.8}, "restore": null})).unwrap();
+    assert_eq!(r["marker"], Value::Null, "back at the end");
+    assert_eq!(ctx.message(), "Step 3 of 3", "progress names each step it replays");
+    let a = layer_a(&s);
+    assert!((a.opacity - 0.8).abs() < 1e-6 && !a.visible, "the edit and the steps after it");
+}
+
+#[test]
+fn a_replay_runs_as_a_background_job_and_cancelling_it_changes_nothing() {
+    let mut s = three_steps();
+    let props = step_id(&mut s, 1);
+    let edit = json!({"step": props, "params": {"opacity": 0.8}});
+    let before = s.active().unwrap().doc.clone();
+    let crate::jobs::Started::Job(id) = s.start("design.editStep", edit.clone()).unwrap() else { panic!("a replay is a job") };
+    assert!(s.cancel_job(id));
+    assert!(s.wait_job(id).is_err());
+    assert!(std::sync::Arc::ptr_eq(&s.active().unwrap().doc, &before), "document and timeline untouched");
+    let crate::jobs::Started::Job(id) = s.start("design.editStep", edit).unwrap() else { panic!("a replay is a job") };
+    s.wait_job(id).unwrap();
+    assert!((layer_a(&s).opacity - 0.8).abs() < 1e-6);
+}
+
+#[test]
+fn rolling_back_to_a_checkpoint_lands_at_once() {
+    let mut s = three_steps();
+    assert!(matches!(s.start("design.rollTo", json!({"at": 1})).unwrap(), crate::jobs::Started::Done(_)), "a dialog opens on it next");
+}

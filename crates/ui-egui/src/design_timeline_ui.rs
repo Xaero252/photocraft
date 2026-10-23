@@ -333,7 +333,9 @@ fn edit(app: &mut PhotocraftApp, i: usize) -> Result<(), String> {
     let tl = app.session.active().and_then(|d| d.doc.design_timeline.clone()).ok_or("the design timeline is off")?;
     let st = tl.steps.get(i).ok_or("no such step")?;
     let size = app.session.active().map(|d| [d.doc.size.width, d.doc.size.height]);
-    app.run("design.rollTo", json!({ "at": i }))?;
+    // Not a background job: the dialog must open on the rolled-back document. Usually a
+    // checkpoint restore; after a reload (no checkpoints) it replays up to step `i` here.
+    app.session.execute("design.rollTo", json!({ "at": i })).map_err(|e| e.to_string())?;
     let dialog = crate::dialogs::open_command_dialog(app, &st.command, &st.label);
     if let Some(d) = app.ui.dialog_mut(dialog) {
         if let Some(o) = st.params.as_object() {
@@ -345,15 +347,19 @@ fn edit(app: &mut PhotocraftApp, i: usize) -> Result<(), String> {
     Ok(())
 }
 
-/// A confirmed Edit Parameters dialog: replay the step with the new values, then put the marker
-/// back. `None` for any other dialog.
+/// A confirmed Edit Parameters dialog: replay the step with the new values and put the marker back,
+/// in one replay. `None` for any other dialog.
 pub fn confirm_edit(app: &mut PhotocraftApp, fields: &serde_json::Map<String, Value>) -> Option<Result<Value, String>> {
     let e = fields.get(EDIT)?;
-    app.filter_preview = None;
     let params = crate::filter_dialog::params_of(fields);
-    let r = app.run("design.editStep", json!({ "step": e["step"], "params": params }));
-    let back = app.run("design.rollTo", json!({ "at": e["restore"] }));
-    Some(r.and(back))
+    let r = app.run("design.editStep", json!({ "step": e["step"], "params": params, "restore": e["restore"] }));
+    // While the replay runs as a job, the edited preview stays on screen (as for a filter's OK).
+    let running = app.session.active().is_some_and(|st| app.session.job_on(st.doc.id).is_some());
+    match app.filter_preview.as_mut() {
+        Some(p) if r.is_ok() && running => p.committing = true,
+        _ => app.filter_preview = None,
+    }
+    Some(r)
 }
 
 /// A cancelled Edit Parameters dialog: the marker goes back where it was.
@@ -483,5 +489,28 @@ mod tests {
         let shown = crate::canvas::ensure_filter_preview(&mut a, 0, &egui::Context::default());
         assert_eq!(shown, Some((1, doc.id.0, [doc.size.width, doc.size.height])), "the live texture, as it was");
         assert!(a.filter_preview.is_none(), "nothing computed inline");
+    }
+
+    #[test]
+    fn a_background_edit_keeps_its_preview_up_until_the_replay_lands() {
+        let mut a = app();
+        a.run("design.start", json!({})).unwrap();
+        a.run("layer.new.layer", json!({"name": "A"})).unwrap();
+        a.run("edit.fillForeground", json!({})).unwrap();
+        a.run("filter.noise.addNoise", json!({"amount": 10})).unwrap();
+        a.run("layer.new.layer", json!({"name": "B"})).unwrap();
+        edit(&mut a, 2).unwrap();
+        let d = a.ui.dialogs.last().unwrap().id;
+        a.ui.dialog_mut(d).unwrap().fields.insert("amount".into(), json!(40));
+        assert!(crate::canvas::ensure_filter_preview(&mut a, 0, &egui::Context::default()).is_some());
+        a.background_jobs = true;
+        crate::dialogs::confirm(&mut a, d).unwrap();
+        let doc = a.session.active().unwrap().doc.id;
+        assert!(a.session.job_on(doc).is_some(), "the replay runs as a job");
+        assert!(a.filter_preview.as_ref().is_some_and(|p| p.committing), "the edited preview stays up meanwhile");
+        let job = a.session.job_on(doc).unwrap().id;
+        a.session.wait_job(job).unwrap();
+        let tl = timeline(&a).unwrap();
+        assert_eq!((tl.steps[2].params["amount"].clone(), tl.in_effect()), (json!(40), 4));
     }
 }
