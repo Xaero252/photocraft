@@ -163,7 +163,7 @@ pub fn load_from_bytes_with(bytes: &[u8], opts: &LoadOptions) -> Result<Document
 }
 
 /// [`load_from_bytes_with`], with warnings for what loaded without part of its stored data (a
-/// design timeline whose layer ids couldn't be kept).
+/// design timeline whose layer ids couldn't be kept), where the other loads fail instead.
 pub fn load_from_bytes_reporting(bytes: &[u8], opts: &LoadOptions) -> Result<(Document, Vec<String>)> {
     let src = store::ZipSource::new(bytes)?;
     store::load_reporting(&src, opts)

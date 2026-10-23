@@ -286,8 +286,13 @@ fn admit_canvas(size: photocraft_geom::Size, opts: &LoadOptions) -> Result<()> {
     Ok(())
 }
 
+/// Fails where [`load_reporting`] would warn: a caller with no way to show the warning could
+/// save the document back and lose what it dropped.
 pub(crate) fn load(src: &dyn ByteSource, opts: &LoadOptions) -> Result<Document> {
-    load_reporting(src, opts).map(|(doc, _)| doc)
+    match load_reporting(src, opts)? {
+        (doc, warnings) if warnings.is_empty() => Ok(doc),
+        (_, warnings) => Err(FormatError::Unsupported(warnings.join("; "))),
+    }
 }
 
 /// [`load`], with what loaded without part of its stored data.

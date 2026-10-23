@@ -90,6 +90,8 @@ fn a_timeline_whose_ids_cannot_be_kept_opens_without_it_and_says_so() {
     assert!(back.design_timeline.is_none());
     assert_ne!(back.layers[0].id, doc.layers[0].id, "the document is remapped with its timeline");
     assert!(warnings.iter().any(|w| w.contains("design timeline")), "{warnings:?}");
+    // A load that can't show the warning refuses rather than let a save erase the history.
+    assert!(matches!(load_from_bytes(&bytes), Err(FormatError::Unsupported(_))));
     // Without a timeline the same ids are remapped with nothing to report.
     doc.design_timeline = None;
     let (_, warnings) = load_from_bytes_reporting(&save_to_bytes(&doc, &SaveOptions::default()).unwrap(), &LoadOptions::default()).unwrap();
