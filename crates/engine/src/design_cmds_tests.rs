@@ -437,3 +437,26 @@ fn saving_under_a_new_name_leaves_the_timeline_editable() {
     s.execute("design.suppress", json!({"step": first})).unwrap();
     assert_eq!(s.active().unwrap().doc.name, "city.pcraft", "replay keeps the saved name");
 }
+
+#[test]
+fn a_layer_copied_from_another_document_never_goes_stale() {
+    let mut s = started();
+    s.execute("layer.new.layer", json!({"name": "early"})).unwrap();
+    s.execute("layer.setProps", json!({"opacity": 0.5})).unwrap();
+    s.execute("select.all", json!({})).unwrap();
+    s.execute("edit.fillForeground", json!({})).unwrap();
+    s.execute("edit.copy", json!({})).unwrap();
+    s.execute("edit.paste", json!({})).unwrap();
+    s.execute("file.new", json!({"width": 16, "height": 16})).unwrap();
+    s.execute("layer.new.layer", json!({"name": "source"})).unwrap();
+    s.execute("layer.copyToDocument", json!({"document": 0})).unwrap();
+    s.set_active(0);
+    let at = |s: &mut Session, cmd: &str| commands(s).iter().position(|c| c == cmd).unwrap();
+    let (props, paste, copy) = (at(&mut s, "layer.setProps"), at(&mut s, "edit.paste"), at(&mut s, "layer.copyToDocument"));
+    let id = step_id(&mut s, props);
+    s.execute("design.editStep", json!({"step": id, "params": {"opacity": 0.8}})).unwrap();
+    // Its pixels came from the other document, which no earlier step here can change.
+    assert_eq!(state(&mut s, copy), "ok");
+    // A paste lands by the selection an earlier step may have changed.
+    assert_eq!(state(&mut s, paste), "stale");
+}

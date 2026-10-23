@@ -52,6 +52,13 @@ fn bakes(id: &str, params: &Value) -> bool {
     BAKED.contains(&id) || (id == crate::vp_cmds::VP && vp_clip())
 }
 
+/// Whether a baked step's stored result can be out of date after an earlier step changes. Not
+/// for one run from another document that only added layers (a layer copied across): its pixels
+/// came from there. A paste can, though: where it lands and Paste Into's mask follow the selection.
+fn can_go_stale(step: &DesignStep) -> bool {
+    step.baked.as_ref().is_some_and(|b| bakes(&step.command, &step.params) || !step.changed.is_empty() || b.selection.is_some())
+}
+
 /// Every document with a timeline, before a command runs (empty when none has one).
 pub(crate) fn capture(s: &Session) -> Vec<Before> {
     let active = s.active().map(|st| st.doc.id);
@@ -189,7 +196,7 @@ pub(crate) fn replay(s: &Session, tl: &photocraft_doc::design::DesignTimeline, f
     };
     let mut r = scratch(s, &resume);
     for (i, step) in tl.steps.iter_mut().enumerate().take(end).skip(start) {
-        let stale = step.baked.is_some() && (step.state == StepState::Stale || changed.is_some_and(|c| i > c));
+        let stale = can_go_stale(step) && (step.state == StepState::Stale || changed.is_some_and(|c| i > c));
         run_step(&mut r, step);
         if stale && !step.state.is_failure() {
             step.state = StepState::Stale;
