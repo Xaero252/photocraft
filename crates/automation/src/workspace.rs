@@ -705,6 +705,9 @@ mod tests {
             ("swatches.export", serde_json::json!({"path": "/outside/set.ase"})),
             ("actions.load", serde_json::json!({"path": "/outside/set.atn"})),
             ("actions.save", serde_json::json!({"path": "/outside/set.atn"})),
+            ("style.presets.importAsl", serde_json::json!({"path": "/outside/set.asl"})),
+            ("style.presets.exportAsl", serde_json::json!({"path": "/outside/set.asl"})),
+            ("style.presets.exportAsl", serde_json::json!({"path": 5})),
             ("layer.layerStyle.contours.load", serde_json::json!({"path": "/outside/set.shc"})),
             ("layer.layerStyle.contours.save", serde_json::json!({"path": "/outside/set.shc"})),
         ] {
@@ -719,6 +722,8 @@ mod tests {
             ("swatches.export", serde_json::json!({"format": "ase"})),
             ("actions.load", serde_json::json!({"data": "QUJD"})),
             ("actions.save", serde_json::json!({"set": "S"})),
+            ("style.presets.importAsl", serde_json::json!({"data": "QUJD"})),
+            ("style.presets.exportAsl", serde_json::json!({"group": "Basics"})),
             ("layer.layerStyle.contours.load", serde_json::json!({"data": "QUJD"})),
             ("layer.layerStyle.contours.save", serde_json::json!({"names": ["a"]})),
         ] {
@@ -807,6 +812,7 @@ mod tests {
                 | "path.rename"
                 | "path.stroke"
                 | "type.attachToPath"
+                | "type.fillPath"
                 | "type.detachFromPath"
                 | "select.toWorkPath"
                 | "layer.vectorMask.add"
@@ -853,6 +859,8 @@ mod tests {
             ("gradient.presets.importGrd", serde_json::json!({"path": "/outside/set.grd"})),
             ("plugin.install", serde_json::json!({"path": "/outside/plugin.wasm"})),
             ("plugin.reload", serde_json::json!({"path": "/outside/plugins"})),
+            ("style.presets.importAsl", serde_json::json!({"path": "/outside/set.asl"})),
+            ("style.presets.exportAsl", serde_json::json!({"path": "/outside/set.asl"})),
             ("prefs.set", serde_json::json!({"path": "historyLog.filePath", "value": "/outside/log"})),
             ("prefs.set", serde_json::json!({"values": {"interface.language": "fr", "historyLog.filePath": "/outside/log"}})),
         ] {
