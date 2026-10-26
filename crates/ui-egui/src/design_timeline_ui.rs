@@ -100,7 +100,7 @@ type Thumbs = Arc<Mutex<HashMap<(u64, usize), Option<egui::TextureHandle>>>>;
 fn thumb(ctx: &egui::Context, tl: &DesignTimeline, st: &DesignStep) -> Option<egui::TextureHandle> {
     let doc = st.checkpoint.0.clone()?;
     let key = (st.step, Arc::as_ptr(&doc) as usize);
-    let thumbs = ctx.data_mut(|d| d.get_temp_mut_or_default::<Thumbs>(egui::Id::new("design_timeline_thumbs")).clone());
+    let thumbs = ctx.data_mut(|d| d.get_temp_mut_or_default::<Thumbs>(egui::Id::unique("design_timeline_thumbs")).clone());
     let mut map = thumbs.lock().ok()?;
     if let Some(t) = map.get(&key) {
         return t.clone();
@@ -227,7 +227,7 @@ fn strip_body(ui: &mut egui::Ui, doc: &Document, tl: &Arc<DesignTimeline>, t: &T
         let x = |k: usize| left + k as f32 * CELL;
         // The marker handle: drag it between steps; the dimming follows it until it's dropped.
         let handle = Rect::from_center_size(pos2(x(at), row.center().y), vec2(12.0, row.height()));
-        let h = ui.interact(handle, ui.id().with("marker"), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+        let h = ui.interact(handle, ui.scope_id().with("marker"), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
         let target = h.interact_pointer_pos().map(|p| (((p.x - left) / CELL).round().max(0.0) as usize).min(n));
         let shown = if h.dragged() { target.unwrap_or(at) } else { at };
         if h.drag_stopped()
@@ -237,8 +237,8 @@ fn strip_body(ui: &mut egui::Ui, doc: &Document, tl: &Arc<DesignTimeline>, t: &T
         }
         for (i, st) in tl.steps.iter().enumerate() {
             let cell = Rect::from_min_size(pos2(x(i) + 2.0, row.top() + 4.0), vec2(CELL - 4.0, CELL));
-            let r = ui.interact(cell, ui.id().with(("step", st.step)), Sense::click());
-            r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &st.label));
+            let r = ui.interact(cell, ui.scope_id().with(("step", st.step)), Sense::click());
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &st.label));
             if r.hovered() {
                 ui.painter().rect_filled(cell, t.radius_sm, t.hover);
             }
@@ -289,7 +289,7 @@ pub fn list(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             let at = tl.in_effect();
             for (i, st) in tl.steps.iter().enumerate() {
                 let (row, r) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::click());
-                r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, i + 1 == at, &st.label));
+                r.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, i + 1 == at, &st.label));
                 if i + 1 == at {
                     ui.painter().rect_filled(row, 0.0, if t.pro { t.row_selected } else { t.accent_soft });
                 } else if r.hovered() {
