@@ -7,6 +7,7 @@ mod corruption;
 mod design_timeline;
 mod directory_symlinks;
 mod float_roundtrip;
+mod frame_stroke;
 mod layer_labels;
 mod roundtrip;
 mod smart_contents;
